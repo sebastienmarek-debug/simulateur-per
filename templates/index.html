@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulateur PER — Optimisation Fiscale</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary: #1e3a5f;
+    --primary-light: #2563eb;
+    --accent: #f59e0b;
+    --accent-light: #fef3c7;
+    --success: #059669;
+    --success-light: #d1fae5;
+    --danger: #dc2626;
+    --danger-light: #fee2e2;
+    --neutral: #64748b;
+    --bg: #f1f5f9;
+    --white: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --shadow: 0 4px 24px rgba(30,58,95,0.10);
+    --radius: 16px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* HEADER */
+  .header { background: var(--primary); color: white; padding: 24px 0 0; }
+  .header-inner { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+  .header-top { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+  .header-logo { width: 44px; height: 44px; background: var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; color: var(--primary); flex-shrink: 0; }
+  .header-title h1 { font-size: 1.4rem; font-weight: 700; }
+  .header-title p { font-size: 0.82rem; opacity: 0.75; margin-top: 2px; }
+
+  /* PROGRESS */
+  .progress-bar { display: flex; gap: 0; }
+  .step-pill { flex: 1; padding: 10px 8px 12px; text-align: center; font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.5); cursor: pointer; border-bottom: 3px solid transparent; transition: all .2s; letter-spacing: 0.02em; }
+  .step-pill.active { color: white; border-bottom-color: var(--accent); }
+  .step-pill.done { color: rgba(255,255,255,0.8); border-bottom-color: var(--success); }
+  .step-pill span { display: block; font-size: 0.62rem; font-weight: 400; margin-top: 2px; opacity: 0.8; }
+
+  /* MAIN */
+  .main { max-width: 860px; margin: 0 auto; padding: 32px 24px 60px; }
+
+  /* CARDS */
+  .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 32px; margin-bottom: 20px; }
+  .card-title { font-size: 1.15rem; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+  .card-subtitle { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 28px; }
+
+  /* FORM */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .form-full { grid-column: 1 / -1; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 0.82rem; font-weight: 600; color: var(--primary); }
+  .field label span { font-weight: 400; color: var(--text-muted); font-size: 0.78rem; }
+  .field input, .field select { border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 0.92rem; color: var(--text); background: var(--white); outline: none; transition: border-color .2s; width: 100%; }
+  .field input:focus, .field select:focus { border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+  .field input.error, .field select.error { border-color: var(--danger); }
+  .field .hint { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
+  .field .hint b { color: var(--primary); }
+
+  /* TOGGLE BUTTONS */
+  .toggle-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .toggle-btn { padding: 8px 16px; border: 1.5px solid var(--border); border-radius: 30px; font-size: 0.82rem; font-weight: 500; cursor: pointer; background: white; color: var(--text-muted); transition: all .15s; }
+  .toggle-btn:hover { border-color: var(--primary-light); color: var(--primary); }
+  .toggle-btn.active { background: var(--primary); border-color: var(--primary); color: white; font-weight: 600; }
+
+  /* INFO BOX */
+  .info-box { background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: var(--radius-sm); padding: 14px 16px; font-size: 0.82rem; color: #1e40af; line-height: 1.5; }
+  .info-box.warning { background: var(--accent-light); border-color: #fcd34d; color: #92400e; }
+  .info-box.success { background: var(--success-light); border-color: #6ee7b7; color: #065f46; }
+  .info-box strong { font-weight: 700; }
+
+  /* BUTTONS */
+  .btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 28px; }
+  .btn { padding: 12px 28px; border-radius: 30px; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; transition: all .15s; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: #162d4a; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(30,58,95,0.3); }
+  .btn-secondary { background: white; color: var(--primary); border: 1.5px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--primary); }
+  .btn-accent { background: var(--accent); color: var(--primary); }
+  .btn-accent:hover { background: #d97706; color: white; transform: translateY(-1px); }
+
+  /* DIVIDER */
+  .divider { border: none; border-top: 1.5px solid var(--border); margin: 24px 0; }
+
+  /* RESULTS */
+  .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  .result-card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; }
+  .result-card.highlight { background: var(--primary); color: white; }
+  .result-card.highlight .rc-label { color: rgba(255,255,255,0.7); }
+  .result-card.highlight .rc-value { color: white; }
+  .rc-label { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .rc-value { font-size: 2rem; font-weight: 800; color: var(--primary); line-height: 1; }
+  .rc-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
+  .rc-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; margin-top: 8px; }
+  .badge-green { background: var(--success-light); color: var(--success); }
+  .badge-amber { background: var(--accent-light); color: #92400e; }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  .badge-red { background: var(--danger-light); color: var(--danger); }
+
+  /* COMPARISON TABLE */
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+  .compare-table th { padding: 10px 14px; text-align: left; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); background: var(--bg); border-bottom: 2px solid var(--border); }
+  .compare-table th.col-with { background: #dbeafe; color: #1e40af; text-align: center; }
+  .compare-table th.col-without { background: #f1f5f9; color: var(--text-muted); text-align: center; }
+  .compare-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .compare-table td.val { text-align: center; font-weight: 600; font-size: 0.92rem; }
+  .compare-table td.val.positive { color: var(--success); }
+  .compare-table td.val.negative { color: var(--danger); }
+  .compare-table tr.total td { font-weight: 700; background: var(--bg); font-size: 0.95rem; }
+  .compare-table tr.total td.best { color: var(--success); font-size: 1rem; }
+  .compare-table tr.total td.col-with { background: #dbeafe; }
+
+  /* RECOMMENDATION */
+  .reco-card { background: linear-gradient(135deg, var(--primary) 0%, #2563eb 100%); border-radius: var(--radius); padding: 32px; color: white; margin-bottom: 20px; }
+  .reco-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .reco-icon { font-size: 2.4rem; }
+  .reco-title { font-size: 1.3rem; font-weight: 800; }
+  .reco-subtitle { font-size: 0.85rem; opacity: 0.8; margin-top: 3px; }
+  .reco-points { display: flex; flex-direction: column; gap: 10px; }
+  .reco-point { display: flex; gap: 10px; align-items: flex-start; font-size: 0.87rem; line-height: 1.5; }
+  .reco-point .dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; margin-top: 7px; flex-shrink: 0; }
+
+  /* PLAFOND BREAKDOWN */
+  .plafond-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.87rem; }
+  .plafond-row:last-child { border-bottom: none; }
+  .plafond-row .pl-label { color: var(--text-muted); }
+  .plafond-row .pl-value { font-weight: 600; color: var(--primary); }
+  .plafond-row.total .pl-label { font-weight: 700; color: var(--text); font-size: 0.95rem; }
+  .plafond-row.total .pl-value { font-size: 1.15rem; color: var(--primary); }
+  .plafond-row.used .pl-value { color: var(--danger); }
+  .plafond-row.available .pl-value { color: var(--success); font-size: 1.1rem; }
+
+  /* CHART CONTAINER */
+  .chart-container { position: relative; height: 280px; }
+
+  /* TIMELINE */
+  .timeline { display: flex; gap: 0; margin: 20px 0; }
+  .tl-item { flex: 1; text-align: center; position: relative; }
+  .tl-item:not(:last-child)::after { content: ''; position: absolute; top: 16px; left: 50%; right: -50%; height: 2px; background: var(--border); z-index: 0; }
+  .tl-dot { width: 32px; height: 32px; border-radius: 50%; background: var(--bg); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin: 0 auto 8px; position: relative; z-index: 1; }
+  .tl-dot.active { background: var(--primary); border-color: var(--primary); color: white; }
+  .tl-dot.done { background: var(--success); border-color: var(--success); color: white; }
+  .tl-label { font-size: 0.72rem; color: var(--text-muted); }
+  .tl-label b { display: block; font-size: 0.78rem; color: var(--text); font-weight: 600; }
+
+  /* PRINT */
+  @media print {
+    .header { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .btn-row, .progress-bar { display: none; }
+    .card, .result-card, .reco-card { box-shadow: none; border: 1px solid var(--border); page-break-inside: avoid; }
+  }
+
+  @media (max-width: 640px) {
+    .form-grid, .form-grid-3 { grid-template-columns: 1fr; }
+    .results-grid { grid-template-columns: 1fr; }
+    .card { padding: 20px; }
+  }
+
+  /* ALERT */
+  .alert { display: none; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.82rem; margin-top: 12px; }
+  .alert.show { display: block; }
+  .alert-error { background: var(--danger-light); color: var(--danger); border: 1px solid #fca5a5; }
+
+  /* SECTION TITLE */
+  .section-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1.5px solid var(--border); }
+
+  /* STEP PAGES */
+  .step-page { display: none; }
+  .step-page.active { display: block; }
+
+  /* SCORE GAUGE */
+  .gauge-wrap { text-align: center; margin: 16px 0; }
+  .gauge-label { font-size: 0.75rem; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .gauge-value { font-size: 3rem; font-weight: 900; color: var(--accent); line-height: 1; }
+  .gauge-desc { font-size: 0.82rem; color: rgba(255,255,255,0.85); margin-top: 4px; }
+
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+  .tag-blue { background: #dbeafe; color: #1e40af; }
+  .tag-green { background: var(--success-light); color: #065f46; }
+  .tag-amber { background: var(--accent-light); color: #92400e; }
+
+  /* NUMBER INPUT STYLING */
+  input[type=number] { -moz-appearance: textfield; }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* REPORT HEADER */
+  .report-meta { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; margin-bottom: 8px; }
+  .report-meta .client-name { font-size: 1.05rem; font-weight: 700; color: var(--primary); }
+  .report-meta .report-date { font-size: 0.78rem; color: var(--text-muted); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="header-top">
+      <div class="header-logo">PER</div>
+      <div class="header-title">
+        <h1>Simulateur d'optimisation fiscale PER</h1>
+        <p>Plan d'Épargne Retraite · Conseil personnalisé · Année fiscale 2024</p>
+      </div>
+    </div>
+    <div class="progress-bar">
+      <div class="step-pill active" onclick="goToStep(1)" id="pill-1">Profil <span>Votre situation</span></div>
+      <div class="step-pill" onclick="goToStep(2)" id="pill-2">Revenus <span>N-1 &amp; statut</span></div>
+      <div class="step-pill" onclick="goToStep(3)" id="pill-3">PER actuel <span>Disponible fiscal</span></div>
+      <div class="step-pill" onclick="goToStep(4)" id="pill-4">Objectifs <span>Retraite &amp; sortie</span></div>
+      <div class="step-pill" onclick="goToStep(5)" id="pill-5">Résultats <span>Conseils &amp; simulations</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ========================= ÉTAPE 1 : PROFIL ========================= -->
+<div class="step-page active" id="step-1">
+  <div class="card">
+    <div class="card-title">Votre profil personnel</div>
+    <div class="card-subtitle">Ces informations permettent de calculer précisément votre plafond de déduction et votre fiscalité.</div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>Prénom</label>
+        <input type="text" id="prenom" placeholder="Votre prénom">
+      </div>
+      <div class="field">
+        <label>Âge actuel</label>
+        <input type="number" id="age" placeholder="ex : 45" min="18" max="75">
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">Situation familiale</div>
+
+    <div class="field" style="margin-bottom:16px">
+      <label>Situation <span>(détermine le nombre de parts fiscales)</span></label>
+      <div class="toggle-group" id="toggle-situation">
+        <button class="toggle-btn active" data-val="celibataire" onclick="setSituation(this)">Célibataire</button>
+        <button class="toggle-btn" data-val="marie" onclick="setSituation(this)">Marié(e)</button>
+        <button class="toggle-btn" data-val="pacse" onclick="setSituation(this)">Pacsé(e)</button>
+        <button class="toggle-btn" data-val="divorce" onclick="setSituation(this)">Divorcé(e)</button>
+        <button class="toggle-btn" data-val="veuf" onclick="setSituation(this)">Veuf(ve)</button>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>Enfants à charge <span>(fiscalement)</span></label>
+        <input type="number" id="enfants" placeholder="0" min="0" max="15" value="0">
+      </div>
+      <div class="field">
+        <label>Nombre de parts fiscales</label>
+        <input type="number" id="parts" placeholder="ex : 2.5" min="0.5" step="0.5" style="background:#f8fafc;" readonly>
+        <div class="hint">Calculé automatiquement · vous pouvez ajuster si besoin</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">Statut professionnel</div>
+
+    <div class="field">
+      <div class="toggle-group" id="toggle-statut">
+        <button class="toggle-btn active" data-val="salarie" onclick="setStatut(this)">Salarié(e)</button>
+        <button class="toggle-btn" data-val="tns" onclick="setStatut(this)">TNS / Indépendant</button>
+        <button class="toggle-btn" data-val="gerant" onclick="setStatut(this)">Gérant assimilé salarié</button>
+        <button class="toggle-btn" data-val="agriculteur" onclick="setStatut(this)">Agriculteur</button>
+        <button class="toggle-btn" data-val="retraite" onclick="setStatut(this)">Retraité</button>
+      </div>
+      <div class="hint" style="margin-top:8px">TNS = Travailleur Non Salarié (gérant majoritaire, professions libérales, auto-entrepreneur)</div>
+    </div>
+
+    <div id="info-statut-tns" style="display:none; margin-top:12px;">
+      <div class="info-box warning">
+        <strong>Dispositif TNS/Agri :</strong> Vous bénéficiez d'un plafond majoré avec la tranche 15% entre 1 et 8 PASS. Les versements sont déductibles de vos bénéfices professionnels (BIC/BNC/BA) de l'année <strong>en cours (N)</strong>.
+      </div>
+    </div>
+
+    <div id="info-statut-gerant" style="display:none; margin-top:12px;">
+      <div class="info-box">
+        <strong>Gérant assimilé salarié :</strong> Vous relevez du dispositif général salarié. Votre plafond est calculé sur les revenus N-1.
+      </div>
+    </div>
+
+    <div class="alert alert-error" id="alert-1"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextStep(1)">Revenus &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= ÉTAPE 2 : REVENUS ========================= -->
+<div class="step-page" id="step-2">
+  <div class="card">
+    <div class="card-title">Vos revenus professionnels</div>
+    <div class="card-subtitle">Ces données permettent de calculer votre plafond annuel de déduction PER.</div>
+
+    <div class="info-box" style="margin-bottom:20px">
+      <strong>Où trouver ces informations ?</strong> Sur votre <strong>déclaration de revenus 2024</strong> (case 1AJ/1BJ pour les salaires) ou votre <strong>avis d'imposition 2024</strong> sur les revenus 2023.
+    </div>
+
+    <div id="bloc-salarie">
+      <div class="section-title">Revenus salariés (année 2023 — N-1)</div>
+      <div class="form-grid">
+        <div class="field">
+          <label>Salaire brut annuel déclaré N-1 <span>(case 1AJ)</span></label>
+          <input type="number" id="salaire-brut" placeholder="ex : 60000" min="0">
+          <div class="hint">Montant <b>avant</b> abattement 10% · case 1AJ de la déclaration</div>
+        </div>
+        <div class="field">
+          <label>Mode de déduction frais professionnels</label>
+          <select id="frais-mode" onchange="updateFraisField()">
+            <option value="forfait">Abattement forfaitaire 10%</option>
+            <option value="reels">Frais réels</option>
+          </select>
+        </div>
+      </div>
+      <div id="frais-reels-field" style="display:none; margin-top:16px;">
+        <div class="field">
+          <label>Montant des frais réels déduits</label>
+          <input type="number" id="frais-reels" placeholder="ex : 5000" min="0">
+          <div class="hint">Min. 504€ · Max. 13 522€ (sauf dérogation)</div>
+        </div>
+      </div>
+      <div id="salaire-conjoint-bloc" style="display:none; margin-top:16px;">
+        <hr class="divider">
+        <div class="section-title">Revenus du conjoint N-1 <span class="tag tag-blue">Mutualisation possible</span></div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Salaire brut conjoint N-1 <span>(case 1BJ)</span></label>
+            <input type="number" id="salaire-conjoint" placeholder="ex : 45000" min="0" value="0">
+          </div>
+          <div class="field">
+            <label>Mode de déduction conjoint</label>
+            <select id="frais-mode-conjoint">
+              <option value="forfait">Abattement forfaitaire 10%</option>
+              <option value="reels">Frais réels</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="bloc-tns" style="display:none;">
+      <div class="section-title">Revenus professionnels (année 2024 — N en cours)</div>
+      <div class="info-box warning" style="margin-bottom:16px;">
+        <strong>Important TNS :</strong> Contrairement aux salariés, votre plafond est calculé sur les revenus de l'<strong>année en cours (2024)</strong>, déductibles de vos bénéfices.
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label>Bénéfices professionnels nets 2024 <span>(BIC/BNC/BA)</span></label>
+          <input type="number" id="revenus-tns" placeholder="ex : 80000" min="0">
+          <div class="hint">Après déduction des cotisations sociales obligatoires (URSSAF, prévoyance...)</div>
+        </div>
+        <div class="field" id="bloc-tns-agri" style="display:none;">
+          <label>Statut conjoint collaborateur ?</label>
+          <select id="conjoint-collab">
+            <option value="non">Non</option>
+            <option value="oui">Oui — plafond au 1/3 de l'exploitant</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">Autres revenus 2024 <span style="font-weight:400;color:var(--text-muted)">(optionnel — pour affiner la TMI)</span></div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Revenus fonciers nets <span>(si bailleurs)</span></label>
+        <input type="number" id="revenus-fonciers" placeholder="0" min="0" value="0">
+      </div>
+      <div class="field">
+        <label>Autres revenus imposables</label>
+        <input type="number" id="autres-revenus" placeholder="0" min="0" value="0">
+      </div>
+    </div>
+
+    <div class="alert alert-error" id="alert-2"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="prevStep(2)">&larr; Retour</button>
+      <button class="btn btn-primary" onclick="nextStep(2)">PER actuel &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= ÉTAPE 3 : PER ACTUEL ========================= -->
+<div class="step-page" id="step-3">
+  <div class="card">
+    <div class="card-title">Votre situation PER actuelle</div>
+    <div class="card-subtitle">Renseignez les plafonds non utilisés des années précédentes pour maximiser votre déduction.</div>
+
+    <div class="info-box" style="margin-bottom:20px">
+      <strong>Où trouver le disponible fiscal ?</strong> Sur votre <strong>avis d'imposition</strong> dans la section <em>"Plafonds de déductibilité épargne retraite"</em> — les montants non utilisés des 3 dernières années y sont indiqués.
+    </div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>Versements PER déjà effectués en 2024</label>
+        <input type="number" id="versements-deja" placeholder="0" min="0" value="0">
+        <div class="hint">Montant déjà versé cette année sur votre PER</div>
+      </div>
+      <div class="field">
+        <label>Valeur totale de votre PER actuel</label>
+        <input type="number" id="valeur-per" placeholder="0" min="0" value="0">
+        <div class="hint">Capital actuellement constitué (optionnel)</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">Reports des années antérieures <span class="tag tag-green">Peut tripler votre plafond !</span></div>
+
+    <div class="form-grid-3">
+      <div class="field">
+        <label>Disponible non utilisé N-1 <span>(2023)</span></label>
+        <input type="number" id="report-n1" placeholder="0" min="0" value="0">
+      </div>
+      <div class="field">
+        <label>Disponible non utilisé N-2 <span>(2022)</span></label>
+        <input type="number" id="report-n2" placeholder="0" min="0" value="0">
+      </div>
+      <div class="field">
+        <label>Disponible non utilisé N-3 <span>(2021)</span></label>
+        <input type="number" id="report-n3" placeholder="0" min="0" value="0">
+      </div>
+    </div>
+
+    <div id="bloc-mutualisation" style="display:none; margin-top:16px;">
+      <hr class="divider">
+      <div class="section-title">Mutualisation avec le conjoint <span class="tag tag-blue">Option couple</span></div>
+      <div class="info-box" style="margin-bottom:16px;">
+        Les couples mariés ou pacsés peuvent <strong>cumuler leurs plafonds respectifs</strong> pour optimiser les versements PER de l'un ou de l'autre.
+      </div>
+      <div class="form-grid-3">
+        <div class="field">
+          <label>Report N-1 conjoint <span>(2023)</span></label>
+          <input type="number" id="report-conj-n1" placeholder="0" min="0" value="0">
+        </div>
+        <div class="field">
+          <label>Report N-2 conjoint <span>(2022)</span></label>
+          <input type="number" id="report-conj-n2" placeholder="0" min="0" value="0">
+        </div>
+        <div class="field">
+          <label>Report N-3 conjoint <span>(2021)</span></label>
+          <input type="number" id="report-conj-n3" placeholder="0" min="0" value="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="alert alert-error" id="alert-3"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="prevStep(3)">&larr; Retour</button>
+      <button class="btn btn-primary" onclick="nextStep(3)">Objectifs &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= ÉTAPE 4 : OBJECTIFS ========================= -->
+<div class="step-page" id="step-4">
+  <div class="card">
+    <div class="card-title">Vos objectifs retraite</div>
+    <div class="card-subtitle">Ces paramètres permettent de comparer la fiscalité à l'entrée et à la sortie, et d'identifier la meilleure stratégie.</div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>Âge de départ à la retraite prévu</label>
+        <input type="number" id="age-retraite" placeholder="ex : 65" min="50" max="80" value="65">
+      </div>
+      <div class="field">
+        <label>Montant à verser sur votre PER en 2024</label>
+        <input type="number" id="montant-versement" placeholder="ex : 5000" min="0">
+        <div class="hint">Montant <b>supplémentaire</b> envisagé cette année</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">Mode de sortie souhaité à la retraite</div>
+
+    <div class="field" style="margin-bottom:20px">
+      <div class="toggle-group" id="toggle-sortie">
+        <button class="toggle-btn active" data-val="capital" onclick="setSortie(this)">Sortie en capital</button>
+        <button class="toggle-btn" data-val="rente" onclick="setSortie(this)">Sortie en rente</button>
+        <button class="toggle-btn" data-val="mixte" onclick="setSortie(this)">Mixte (capital + rente)</button>
+        <button class="toggle-btn" data-val="inconnu" onclick="setSortie(this)">Je ne sais pas encore</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">Fiscalité estimée à la retraite</div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>Revenus estimés à la retraite <span>(annuel)</span></label>
+        <input type="number" id="revenus-retraite" placeholder="ex : 30000" min="0">
+        <div class="hint">Pensions, loyers, autres revenus à la retraite. Laissez vide si inconnu.</div>
+      </div>
+      <div class="field">
+        <label>Taux de rendement annuel estimé</label>
+        <select id="taux-rendement">
+          <option value="0.02">Prudent — 2% / an</option>
+          <option value="0.04" selected>Équilibré — 4% / an</option>
+          <option value="0.06">Dynamique — 6% / an</option>
+          <option value="0.08">Offensif — 8% / an</option>
+        </select>
+        <div class="hint">Taux de rendement moyen hypothétique du PER</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">Option fiscale pour vos versements</div>
+
+    <div class="field">
+      <label>Souhaitez-vous déduire vos versements de vos revenus ?</label>
+      <div class="toggle-group" id="toggle-deduction">
+        <button class="toggle-btn active" data-val="oui" onclick="setDeduction(this)">Oui — je déduis (recommandé si TMI ≥ 30%)</button>
+        <button class="toggle-btn" data-val="non" onclick="setDeduction(this)">Non — je ne déduis pas</button>
+        <button class="toggle-btn" data-val="comparer" onclick="setDeduction(this)">Je veux comparer les deux</button>
+      </div>
+      <div class="hint" style="margin-top:8px">La non-déduction peut être intéressante si votre TMI actuelle est basse ou si votre TMI à la retraite sera élevée.</div>
+    </div>
+
+    <div class="alert alert-error" id="alert-4"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="prevStep(4)">&larr; Retour</button>
+      <button class="btn btn-accent" onclick="calculate()">Calculer mes résultats ✦</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= ÉTAPE 5 : RÉSULTATS ========================= -->
+<div class="step-page" id="step-5">
+
+  <!-- REPORT HEADER -->
+  <div class="card" style="margin-bottom:20px; padding:20px 32px;">
+    <div class="report-meta">
+      <div>
+        <div class="client-name" id="res-client-name">Simulation PER</div>
+        <div class="report-date" id="res-date">Analyse du <span></span></div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-secondary" onclick="window.print()" style="padding:8px 18px; font-size:0.8rem;">🖨 Imprimer</button>
+        <button class="btn btn-secondary" onclick="goToStep(1)" style="padding:8px 18px; font-size:0.8rem;">✏️ Modifier</button>
+      </div>
+    </div>
+    <div id="res-profil-tags" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+  </div>
+
+  <!-- PLAFOND -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">Votre enveloppe fiscale PER 2024</div>
+    <div class="two-col">
+      <div>
+        <div id="res-plafond-detail"></div>
+      </div>
+      <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; background:var(--bg); border-radius:12px; padding:24px; text-align:center;">
+        <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:8px;">Plafond restant disponible</div>
+        <div id="res-plafond-dispo" style="font-size:2.8rem; font-weight:900; color:var(--success); line-height:1;">—</div>
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;">Déductible en 2024</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ÉCONOMIE -->
+  <div class="results-grid">
+    <div class="result-card highlight">
+      <div class="rc-label">Économie d'impôt immédiate</div>
+      <div class="rc-value" id="res-economie">—</div>
+      <div class="rc-sub" id="res-economie-sub">Sur votre versement envisagé</div>
+      <div class="rc-badge badge-green" id="res-tmi-badge" style="background:rgba(255,255,255,0.2);color:white;">TMI —</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Coût réel après avantage fiscal</div>
+      <div class="rc-value" id="res-cout-reel">—</div>
+      <div class="rc-sub" id="res-cout-sub">Votre versement net d'impôt</div>
+      <div class="rc-badge badge-blue" id="res-versement-badge">Versement —</div>
+    </div>
+  </div>
+
+  <div class="results-grid">
+    <div class="result-card">
+      <div class="rc-label">Capital brut à la retraite</div>
+      <div class="rc-value" id="res-capital-brut">—</div>
+      <div class="rc-sub" id="res-capital-sub">Projection à <span id="res-age-retraite-label">—</span> ans</div>
+    </div>
+    <div class="result-card">
+      <div class="rc-label">Capital net après fiscalité sortie</div>
+      <div class="rc-value" id="res-capital-net">—</div>
+      <div class="rc-sub" id="res-capital-net-sub">Versements + gains nets d'impôt</div>
+    </div>
+  </div>
+
+  <!-- TABLEAU COMPARATIF -->
+  <div class="card" id="bloc-comparaison" style="margin-bottom:20px; display:none;">
+    <div class="card-title">Comparaison : Déduction vs. Non-déduction</div>
+    <div class="card-subtitle">Pour un versement identique, voici l'impact fiscal à l'entrée et à la sortie.</div>
+    <div style="overflow-x:auto;">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Élément</th>
+            <th class="col-with">Avec déduction</th>
+            <th class="col-without">Sans déduction</th>
+          </tr>
+        </thead>
+        <tbody id="res-compare-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RECOMMANDATION -->
+  <div class="reco-card" id="res-reco-card">
+    <div class="reco-header">
+      <div class="reco-icon" id="reco-icon">💡</div>
+      <div>
+        <div class="reco-title" id="reco-title">Recommandation</div>
+        <div class="reco-subtitle" id="reco-subtitle"></div>
+      </div>
+    </div>
+    <div class="reco-points" id="reco-points"></div>
+  </div>
+
+  <!-- GRAPHIQUES -->
+  <div class="two-col" style="margin-bottom:20px;">
+    <div class="card">
+      <div class="card-title" style="font-size:0.95rem;">Évolution du capital</div>
+      <div class="chart-container">
+        <canvas id="chart-evolution"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="font-size:0.95rem;">Répartition à la sortie</div>
+      <div class="chart-container">
+        <canvas id="chart-repartition"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- POINTS D'ATTENTION -->
+  <div class="card" id="res-attention" style="margin-bottom:20px;">
+    <div class="card-title">Points d'attention réglementaires</div>
+    <div id="res-attention-content"></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="goToStep(1)">← Nouvelle simulation</button>
+    <button class="btn btn-primary" onclick="window.print()">🖨 Imprimer le rapport</button>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<script>
+// ============================================================
+// CONSTANTES FISCALES
+// ============================================================
+const PASS = { 2021: 41136, 2022: 43992, 2023: 43992, 2024: 46368 };
+const PASS_N   = PASS[2024]; // 46 368 € — pour TNS 2024
+const PASS_N1  = PASS[2023]; // 43 992 € — pour salariés (revenus N-1)
+
+// Barème IR 2025 sur revenus 2024
+const IR_BAREME = [
+  { seuil: 0,      taux: 0    },
+  { seuil: 11497,  taux: 0.11 },
+  { seuil: 29315,  taux: 0.30 },
+  { seuil: 83823,  taux: 0.41 },
+  { seuil: 180294, taux: 0.45 }
+];
+
+// Abattements RVTO par tranche d'âge
+function abattementRVTO(age) {
+  if (age < 50) return 0.30;
+  if (age < 60) return 0.50;
+  if (age < 70) return 0.60;
+  return 0.70;
+}
+
+// ============================================================
+// ÉTAT DE L'APPLICATION
+// ============================================================
+let state = {
+  situation: 'celibataire',
+  statut: 'salarie',
+  sortie: 'capital',
+  deduction: 'oui',
+  currentStep: 1
+};
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function goToStep(n) {
+  document.querySelectorAll('.step-page').forEach(p => p.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+  document.querySelectorAll('.step-pill').forEach((p, i) => {
+    p.classList.remove('active', 'done');
+    if (i + 1 === n) p.classList.add('active');
+    else if (i + 1 < n) p.classList.add('done');
+  });
+  state.currentStep = n;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function nextStep(current) {
+  if (!validateStep(current)) return;
+  if (current === 4) { calculate(); return; }
+  goToStep(current + 1);
+}
+
+function prevStep(current) { goToStep(current - 1); }
+
+// ============================================================
+// VALIDATION
+// ============================================================
+function showAlert(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+function validateStep(n) {
+  if (n === 1) {
+    const age = parseInt(val('age'));
+    if (!age || age < 18 || age > 80) { showAlert('alert-1', 'Veuillez saisir un âge valide (18-80 ans).'); return false; }
+    return true;
+  }
+  if (n === 2) {
+    if (state.statut === 'salarie' || state.statut === 'gerant') {
+      if (!numVal('salaire-brut')) { showAlert('alert-2', 'Veuillez saisir votre salaire brut annuel déclaré.'); return false; }
+    }
+    if (state.statut === 'tns' || state.statut === 'agriculteur') {
+      if (!numVal('revenus-tns')) { showAlert('alert-2', 'Veuillez saisir vos bénéfices professionnels nets.'); return false; }
+    }
+    return true;
+  }
+  if (n === 4) {
+    const ageR = parseInt(val('age-retraite'));
+    const ageA = parseInt(val('age'));
+    if (!ageR || ageR <= ageA) { showAlert('alert-4', 'L\'âge de retraite doit être supérieur à votre âge actuel.'); return false; }
+    if (!numVal('montant-versement')) { showAlert('alert-4', 'Veuillez saisir le montant du versement envisagé.'); return false; }
+    return true;
+  }
+  return true;
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function val(id) { return document.getElementById(id)?.value || ''; }
+function numVal(id) { return parseFloat(document.getElementById(id)?.value) || 0; }
+function fmt(n, dec=0) {
+  return new Intl.NumberFormat('fr-FR', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(Math.round(n));
+}
+function fmtE(n) { return fmt(n) + ' €'; }
+
+// ============================================================
+// TOGGLES
+// ============================================================
+function setSituation(btn) {
+  document.querySelectorAll('#toggle-situation .toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.situation = btn.dataset.val;
+  updateParts();
+  document.getElementById('salaire-conjoint-bloc').style.display =
+    (state.situation === 'marie' || state.situation === 'pacse') ? 'block' : 'none';
+  document.getElementById('bloc-mutualisation').style.display =
+    (state.situation === 'marie' || state.situation === 'pacse') ? 'block' : 'none';
+}
+
+function setStatut(btn) {
+  document.querySelectorAll('#toggle-statut .toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.statut = btn.dataset.val;
+  const isTNS = (state.statut === 'tns' || state.statut === 'agriculteur');
+  document.getElementById('bloc-salarie').style.display = isTNS ? 'none' : 'block';
+  document.getElementById('bloc-tns').style.display = isTNS ? 'block' : 'none';
+  document.getElementById('info-statut-tns').style.display = isTNS ? 'block' : 'none';
+  document.getElementById('info-statut-gerant').style.display = state.statut === 'gerant' ? 'block' : 'none';
+  document.getElementById('bloc-tns-agri').style.display = state.statut === 'agriculteur' ? 'block' : 'none';
+}
+
+function setSortie(btn) {
+  document.querySelectorAll('#toggle-sortie .toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.sortie = btn.dataset.val;
+}
+
+function setDeduction(btn) {
+  document.querySelectorAll('#toggle-deduction .toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.deduction = btn.dataset.val;
+}
+
+function updateFraisField() {
+  const mode = val('frais-mode');
+  document.getElementById('frais-reels-field').style.display = mode === 'reels' ? 'block' : 'none';
+}
+
+function updateParts() {
+  const enfants = parseInt(val('enfants')) || 0;
+  let parts = 1;
+  if (state.situation === 'marie' || state.situation === 'pacse') parts = 2;
+  else if (state.situation === 'veuf') parts = 1;
+  // Enfants: 0.5 pour les 2 premiers, 1 à partir du 3ème
+  if (enfants >= 1) parts += 0.5;
+  if (enfants >= 2) parts += 0.5;
+  if (enfants >= 3) parts += (enfants - 2);
+  document.getElementById('parts').value = parts;
+}
+
+// ============================================================
+// CALCULS IR
+// ============================================================
+function calculateIR(revImposable, nbParts) {
+  if (revImposable <= 0) return 0;
+  const qi = revImposable / nbParts;
+  let ir = 0;
+  for (let i = 1; i < IR_BAREME.length; i++) {
+    const minS = IR_BAREME[i-1].seuil;
+    const maxS = (i < IR_BAREME.length - 1) ? IR_BAREME[i].seuil : Infinity;
+    if (qi > minS) ir += (Math.min(qi, maxS) - minS) * IR_BAREME[i].taux;
+  }
+  return Math.max(0, ir * nbParts);
+}
+
+function getTMI(revImposable, nbParts) {
+  if (revImposable <= 0) return 0;
+  const qi = revImposable / nbParts;
+  let tmi = 0;
+  for (let i = 1; i < IR_BAREME.length; i++) {
+    if (qi > IR_BAREME[i-1].seuil) tmi = IR_BAREME[i].taux;
+  }
+  return tmi;
+}
+
+// ============================================================
+// CALCUL DES PLAFONDS
+// ============================================================
+function calcPlafondSalarie(salaireBrut, fraispro) {
+  const revenusNets = Math.max(0, salaireBrut - fraispro);
+  const p1 = Math.min(revenusNets * 0.10, 8 * PASS_N1 * 0.10);
+  const p2 = PASS_N1 * 0.10;
+  return Math.max(p1, p2);
+}
+
+function calcPlafondTNS(revenusPro) {
+  const revPlaf = Math.min(revenusPro, 8 * PASS_N);
+  const p1 = revPlaf * 0.10 + Math.max(0, revPlaf - PASS_N) * 0.15;
+  const p2 = PASS_N * 0.10;
+  return Math.max(p1, p2);
+}
+
+// ============================================================
+// CALCUL PRINCIPAL
+// ============================================================
+function calculate() {
+  if (!validateStep(4)) return;
+
+  // --- Lecture des données ---
+  const prenom    = val('prenom') || 'Client';
+  const age       = parseInt(val('age')) || 45;
+  const nbParts   = parseFloat(val('parts')) || 1;
+  const ageRet    = parseInt(val('age-retraite')) || 65;
+  const annees    = ageRet - age;
+  const rendement = parseFloat(val('taux-rendement')) || 0.04;
+  const versement = numVal('montant-versement');
+  const deja      = numVal('versements-deja');
+  const valeurPER = numVal('valeur-per');
+
+  // Revenus
+  let salaireBrut = numVal('salaire-brut');
+  let fraisMode   = val('frais-mode');
+  let fraispro    = (fraisMode === 'reels') ? numVal('frais-reels') : Math.min(Math.max(salaireBrut * 0.10, 504), 13522);
+  let revenusTNS  = numVal('revenus-tns');
+  let salaireConj = numVal('salaire-conjoint');
+  let fraisConj   = (val('frais-mode-conjoint') === 'reels') ? 0 : Math.min(Math.max(salaireConj * 0.10, 504), 13522);
+
+  // Revenus autres
+  let revFonciers = numVal('revenus-fonciers');
+  let autresRev   = numVal('autres-revenus');
+
+  // Reports
+  let reportN1 = numVal('report-n1');
+  let reportN2 = numVal('report-n2');
+  let reportN3 = numVal('report-n3');
+  let reportConj = numVal('report-conj-n1') + numVal('report-conj-n2') + numVal('report-conj-n3');
+
+  // Revenus retraite
+  let revRetEstime = numVal('revenus-retraite') || 0;
+
+  // --- Calcul du plafond annuel ---
+  let plafondAnnuel = 0;
+  let plafondAnnuelConj = 0;
+
+  if (state.statut === 'tns' || state.statut === 'agriculteur') {
+    plafondAnnuel = calcPlafondTNS(revenusTNS);
+  } else {
+    plafondAnnuel = calcPlafondSalarie(salaireBrut, fraispro);
+    if (state.situation === 'marie' || state.situation === 'pacse') {
+      plafondAnnuelConj = calcPlafondSalarie(salaireConj, fraisConj);
+    }
+  }
+
+  // Total plafond disponible
+  const totalReports = reportN1 + reportN2 + reportN3;
+  const totalReportsConj = reportConj;
+  const plafondTotal = plafondAnnuel + totalReports - deja;
+  const plafondConj = plafondAnnuelConj + totalReportsConj;
+  const plafondDisponible = Math.max(0, plafondTotal + (state.situation === 'marie' || state.situation === 'pacse' ? plafondConj : 0));
+
+  // --- Calcul TMI actuelle ---
+  let revenuImposable = 0;
+  if (state.statut === 'tns' || state.statut === 'agriculteur') {
+    revenuImposable = revenusTNS + revFonciers + autresRev;
+  } else {
+    const netImpSalarie  = salaireBrut - fraispro;
+    const netImpConj     = salaireConj - fraisConj;
+    revenuImposable = netImpSalarie + netImpConj + revFonciers + autresRev;
+  }
+
+  const tmi = getTMI(revenuImposable, nbParts);
+  const irAvant = calculateIR(revenuImposable, nbParts);
+  const versEffectif = Math.min(versement, plafondDisponible);
+  const revApresDeduction = Math.max(0, revenuImposable - versEffectif);
+  const irApres = calculateIR(revApresDeduction, nbParts);
+  const economieIR = irAvant - irApres;
+
+  // --- TMI à la retraite ---
+  let tmiRet = 0;
+  if (revRetEstime > 0) {
+    tmiRet = getTMI(revRetEstime, nbParts);
+  } else {
+    // Estimation empirique: 60% du revenu actuel
+    const revRetEstAuto = revenuImposable * 0.60;
+    tmiRet = getTMI(revRetEstAuto, nbParts);
+  }
+
+  // --- Projection capital ---
+  const capitalBrut = versEffectif * Math.pow(1 + rendement, annees);
+  const gainsNets   = capitalBrut - versEffectif;
+
+  // Avec déduction — sortie capital
+  const impotSortieAD  = versEffectif * tmiRet;  // IR sur versements (RVTG sans abat 10% sur capital)
+  const pfuGains       = gainsNets * 0.128;
+  const psGains        = gainsNets * 0.172;
+  const capitalNetAD   = capitalBrut - impotSortieAD - pfuGains - psGains;
+
+  // Sans déduction — sortie capital
+  const capitalNetSD   = capitalBrut - pfuGains - psGains; // versements non taxés
+
+  // Valeur PER projetée (existante + nouveau versement)
+  const capitalTotal = (valeurPER * Math.pow(1 + rendement, annees)) + capitalBrut;
+
+  // --- Affichage résultats ---
+  goToStep(5);
+
+  // En-tête
+  const dateStr = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  document.getElementById('res-client-name').textContent = `Simulation PER — ${prenom}`;
+  document.getElementById('res-date').innerHTML = `Analyse du <span>${dateStr}</span>`;
+
+  // Tags profil
+  const tagsDiv = document.getElementById('res-profil-tags');
+  tagsDiv.innerHTML = [
+    `<span class="tag tag-blue">${capitalize(state.statut)}</span>`,
+    `<span class="tag tag-blue">${capitalize(state.situation)}</span>`,
+    `<span class="tag tag-blue">${nbParts} part${nbParts > 1 ? 's' : ''}</span>`,
+    `<span class="tag tag-amber">TMI ${(tmi*100).toFixed(0)}%</span>`,
+    `<span class="tag tag-green">Retraite à ${ageRet} ans</span>`,
+    `<span class="tag tag-green">Horizon ${annees} ans</span>`,
+  ].join('');
+
+  // Plafond breakdown
+  const detailDiv = document.getElementById('res-plafond-detail');
+  detailDiv.innerHTML = `
+    <div class="plafond-row"><span class="pl-label">Plafond annuel ${state.statut==='tns'||state.statut==='agriculteur'?'TNS/Agri':'Salarié'} (basé ${state.statut==='tns'?'revenus 2024':'revenus 2023'})</span><span class="pl-value">${fmtE(plafondAnnuel)}</span></div>
+    ${(state.situation==='marie'||state.situation==='pacse') ? `<div class="plafond-row"><span class="pl-label">Plafond annuel conjoint</span><span class="pl-value">${fmtE(plafondAnnuelConj)}</span></div>` : ''}
+    <div class="plafond-row"><span class="pl-label">Report N-1 (2023)</span><span class="pl-value">${fmtE(reportN1)}</span></div>
+    <div class="plafond-row"><span class="pl-label">Report N-2 (2022)</span><span class="pl-value">${fmtE(reportN2)}</span></div>
+    <div class="plafond-row"><span class="pl-label">Report N-3 (2021)</span><span class="pl-value">${fmtE(reportN3)}</span></div>
+    ${(state.situation==='marie'||state.situation==='pacse') ? `<div class="plafond-row"><span class="pl-label">Reports conjoint (N-1 à N-3)</span><span class="pl-value">${fmtE(reportConj)}</span></div>` : ''}
+    <div class="plafond-row total"><span class="pl-label">Total disponible</span><span class="pl-value">${fmtE(plafondDisponible + deja)}</span></div>
+    ${deja > 0 ? `<div class="plafond-row used"><span class="pl-label">Déjà versé en 2024</span><span class="pl-value">− ${fmtE(deja)}</span></div>` : ''}
+    <div class="plafond-row available"><span class="pl-label">🟢 Reste à utiliser</span><span class="pl-value">${fmtE(plafondDisponible)}</span></div>
+  `;
+  document.getElementById('res-plafond-dispo').textContent = fmtE(plafondDisponible);
+
+  // Économie
+  document.getElementById('res-economie').textContent = fmtE(economieIR);
+  document.getElementById('res-economie-sub').textContent = `Sur un versement de ${fmtE(versEffectif)}`;
+  document.getElementById('res-tmi-badge').textContent = `TMI ${(tmi*100).toFixed(0)}%`;
+  document.getElementById('res-cout-reel').textContent = fmtE(versEffectif - economieIR);
+  document.getElementById('res-cout-sub').textContent = `Versement ${fmtE(versEffectif)} − économie ${fmtE(economieIR)}`;
+  document.getElementById('res-versement-badge').textContent = `Versement ${fmtE(versEffectif)}`;
+
+  // Capital
+  document.getElementById('res-capital-brut').textContent = fmtE(capitalBrut);
+  document.getElementById('res-capital-sub').textContent = `Dans ${annees} ans · rendement ${(rendement*100).toFixed(0)}%/an`;
+  document.getElementById('res-age-retraite-label').textContent = ageRet;
+  const capNetShow = state.deduction === 'non' ? capitalNetSD : capitalNetAD;
+  document.getElementById('res-capital-net').textContent = fmtE(capNetShow);
+  document.getElementById('res-capital-net-sub').textContent = state.deduction === 'non'
+    ? 'Sans déduction — versements non taxés à la sortie'
+    : 'Avec déduction — versements imposés au barème à la sortie';
+
+  // Tableau comparatif
+  if (state.deduction === 'comparer') {
+    document.getElementById('bloc-comparaison').style.display = 'block';
+    const tbl = document.getElementById('res-compare-body');
+    const rows = [
+      ['Versement sur le PER', fmtE(versEffectif), fmtE(versEffectif)],
+      ['Économie d\'impôt immédiate', `<span class="positive">+ ${fmtE(economieIR)}</span>`, '<span style="color:var(--text-muted)">0 €</span>'],
+      ['Coût réel (net d\'économie)', fmtE(versEffectif - economieIR), fmtE(versEffectif)],
+      ['Capital brut projeté à la retraite', fmtE(capitalBrut), fmtE(capitalBrut)],
+      [`IR sur versements à la sortie (TMI ret. ${(tmiRet*100).toFixed(0)}%)`, `<span class="negative">− ${fmtE(impotSortieAD)}</span>`, '<span style="color:var(--text-muted)">0 €</span>'],
+      ['PFU 12,8% sur plus-values', `<span class="negative">− ${fmtE(pfuGains)}</span>`, `<span class="negative">− ${fmtE(pfuGains)}</span>`],
+      ['PS 17,2% sur plus-values', `<span class="negative">− ${fmtE(psGains)}</span>`, `<span class="negative">− ${fmtE(psGains)}</span>`],
+    ];
+    tbl.innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td class="val">${r[1]}</td><td class="val">${r[2]}</td></tr>`).join('')
+      + `<tr class="total"><td><b>Capital net</b></td><td class="val best">${fmtE(capitalNetAD)}</td><td class="val">${fmtE(capitalNetSD)}</td></tr>`
+      + `<tr class="total"><td><b>Gain vs. coût réel</b></td><td class="val ${capitalNetAD > (versEffectif-economieIR) ? 'best' : ''}">${fmtE(capitalNetAD - (versEffectif-economieIR))}</td><td class="val ${capitalNetSD > versEffectif ? 'best' : ''}">${fmtE(capitalNetSD - versEffectif)}</td></tr>`;
+  }
+
+  // --- Recommandation ---
+  buildReco(tmi, tmiRet, plafondDisponible, versEffectif, economieIR, capitalNetAD, capitalNetSD, annees, prenom);
+
+  // --- Graphiques ---
+  buildCharts(annees, rendement, versEffectif, capitalNetAD, capitalNetSD, impotSortieAD, pfuGains, psGains);
+
+  // --- Points d'attention ---
+  buildAttention(tmi, tmiRet, plafondDisponible, versEffectif, annees, state.sortie);
+}
+
+// ============================================================
+// RECOMMANDATION PERSONNALISÉE
+// ============================================================
+function buildReco(tmi, tmiRet, plafondDispo, versement, economieIR, capitalNetAD, capitalNetSD, annees, prenom) {
+  let icon, title, subtitle, points = [];
+
+  const avantageDeduction = capitalNetAD - capitalNetSD + economieIR;
+  const deductionFavorable = tmi > tmiRet || tmi >= 0.30;
+
+  if (deductionFavorable) {
+    icon = '🏆';
+    title = `La déduction fiscale est fortement recommandée, ${prenom}`;
+    subtitle = `Votre TMI actuelle (${(tmi*100).toFixed(0)}%) est supérieure à votre TMI estimée à la retraite (${(tmiRet*100).toFixed(0)}%)`;
+    points = [
+      `<b>Économie immédiate de ${fmtE(economieIR)}</b> — chaque euro versé vous coûte réellement ${fmtE((versement-economieIR)/versement*100, 1)} centimes net d'impôt.`,
+      `<b>Effet de levier fiscal :</b> en déduisant ${fmtE(versement)}, vous investissez ${fmtE(versement)} mais n'en ressentez que ${fmtE(versement - economieIR)} de manque à gagner.`,
+      plafondDispo > versement ? `<b>Enveloppe non utilisée :</b> vous pouvez encore déduire ${fmtE(plafondDispo - versement)} supplémentaires cette année — profitez-en !` : `<b>Versement optimisé :</b> votre versement utilise pleinement votre plafond disponible.`,
+      annees >= 15 ? `<b>Horizon long (${annees} ans) :</b> la capitalisation sur la durée amplifie l'avantage fiscal. La déduction est d'autant plus pertinente.` : `<b>Horizon ${annees} ans :</b> pensez à équilibrer entre PER et supports liquides pour conserver une épargne accessible.`,
+    ];
+  } else if (tmi === tmiRet) {
+    icon = '⚖️';
+    title = `La déduction reste avantageuse grâce à l'effet de capitalisation`;
+    subtitle = `TMI identique actuellement et à la retraite (${(tmi*100).toFixed(0)}%) — l'avantage vient de la capitalisation des économies d'impôt`;
+    points = [
+      `<b>TMIs identiques :</b> en apparence neutre, la déduction est en réalité favorable car elle vous permet de placer <b>davantage</b> de capital (les ${fmtE(economieIR)} économisés peuvent être réinvestis).`,
+      `<b>Stratégie mixte possible :</b> déduisez une partie des versements (pour les tranches à 30%+) et ne déduisez pas le reste si votre TMI retombe à 11%.`,
+      plafondDispo > versement ? `<b>Reports disponibles :</b> ${fmtE(plafondDispo - versement)} de plafond non utilisé — à étudier selon votre trésorerie.` : '',
+    ].filter(Boolean);
+  } else {
+    icon = '🔄';
+    title = `Stratégie à adapter — la non-déduction mérite d'être étudiée`;
+    subtitle = `Votre TMI actuelle (${(tmi*100).toFixed(0)}%) est inférieure à la TMI estimée à la retraite (${(tmiRet*100).toFixed(0)}%)`;
+    points = [
+      `<b>Option sans déduction :</b> vos versements seront exonérés à la sortie en capital, économisant l'IR au moment du déblocage.`,
+      `<b>Cependant :</b> la déduction reste possible et peut être intéressante si votre TMI baisse à la retraite plus que prévu. Revoyez ce calcul avec des projections précises de vos revenus retraite.`,
+      `<b>Recommandation :</b> consultez un conseiller patrimonial pour simuler les deux scenarii avec vos relevés de retraite estimatifs.`,
+    ];
+  }
+
+  document.getElementById('reco-icon').textContent = icon;
+  document.getElementById('reco-title').textContent = title;
+  document.getElementById('reco-subtitle').textContent = subtitle;
+  document.getElementById('reco-points').innerHTML = points
+    .map(p => `<div class="reco-point"><div class="dot"></div><div>${p}</div></div>`)
+    .join('');
+}
+
+// ============================================================
+// POINTS D'ATTENTION
+// ============================================================
+function buildAttention(tmi, tmiRet, plafondDispo, versement, annees, sortie) {
+  const att = [];
+
+  att.push({ type:'info', text:'<strong>Blocage des fonds :</strong> Les sommes versées sur un PER sont bloquées jusqu\'à la retraite, sauf cas de déblocage exceptionnel (décès du conjoint, invalidité 2ème/3ème catégorie, surendettement, expiration des droits au chômage, liquidation judiciaire, acquisition de la résidence principale pour les versements volontaires).' });
+
+  if (sortie === 'rente') {
+    att.push({ type:'warning', text:'<strong>Sortie en rente :</strong> Si vos versements ont été déduits, la rente est imposée comme une pension (RVTG — abattement 10% puis barème IR). Si non déduits, la rente est une RVTO avec abattement selon votre âge. Pensez à simuler les deux options avec un conseiller.' });
+  }
+
+  if (sortie === 'capital') {
+    att.push({ type:'info', text:'<strong>Sortie en capital :</strong> Les versements déduits sont soumis au barème IR sans abattement de 10%. Les gains sont imposés au PFU 12,8% + PS 17,2%. Une sortie en capital fractionnée est possible (rachat partiel).' });
+  }
+
+  if (tmi >= 0.41) {
+    att.push({ type:'success', text:'<strong>TMI 41% ou 45% :</strong> Votre tranche est très élevée. Maximisez absolument votre plafond PER, et envisagez d\'utiliser également les reports des 3 années précédentes si vous ne l\'avez pas fait.' });
+  }
+
+  if (plafondDispo > versement * 2) {
+    att.push({ type:'warning', text:`<strong>Plafond sous-utilisé :</strong> Votre plafond disponible (${fmtE(plafondDispo)}) est bien supérieur à votre versement envisagé. Étudiez la possibilité d\'augmenter votre effort d\'épargne pour maximiser l\'avantage fiscal.` });
+  }
+
+  if (annees < 10) {
+    att.push({ type:'warning', text:'<strong>Horizon court (moins de 10 ans) :</strong> Avec un horizon retraite réduit, pensez à préserver également une épargne liquide. Le PER convient bien si votre TMI reste élevée jusqu\'à la retraite.' });
+  }
+
+  att.push({ type:'info', text:'<strong>Décès avant 70 ans :</strong> Le PER est soumis à l\'article 990-I du CGI (abattement de 152 500€ par bénéficiaire). Après 70 ans, l\'article 757-B s\'applique sur le montant total. Désignez soigneusement vos bénéficiaires.' });
+
+  const div = document.getElementById('res-attention-content');
+  div.innerHTML = att.map(a => `<div class="info-box ${a.type==='warning'?'warning':a.type==='success'?'success':''}" style="margin-bottom:10px;">${a.text}</div>`).join('');
+}
+
+// ============================================================
+// GRAPHIQUES
+// ============================================================
+let chartEvolution = null;
+let chartRepartition = null;
+
+function buildCharts(annees, rendement, versement, capitalNetAD, capitalNetSD, impotSortie, pfuGains, psGains) {
+  if (chartEvolution) chartEvolution.destroy();
+  if (chartRepartition) chartRepartition.destroy();
+
+  // Évolution du capital
+  const labels = [];
+  const dataAD = [];
+  const dataSD = [];
+  for (let i = 0; i <= annees; i += Math.max(1, Math.floor(annees / 10))) {
+    labels.push(`${i} ans`);
+    dataAD.push(Math.round(versement * Math.pow(1 + rendement, i)));
+    dataSD.push(Math.round(versement * Math.pow(1 + rendement, i)));
+  }
+
+  const ctx1 = document.getElementById('chart-evolution').getContext('2d');
+  chartEvolution = new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Capital brut',
+        data: dataAD,
+        borderColor: '#1e3a5f',
+        backgroundColor: 'rgba(30,58,95,0.08)',
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: {
+        label: ctx => fmtE(ctx.raw)
+      }}},
+      scales: {
+        y: { ticks: { callback: v => fmt(v/1000) + 'k€', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+        x: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+
+  // Répartition à la sortie
+  const versNet = versement;
+  const gainsN  = Math.max(0, versement * Math.pow(1 + rendement, annees) - versement);
+  const tax     = impotSortie + pfuGains + psGains;
+
+  const ctx2 = document.getElementById('chart-repartition').getContext('2d');
+  chartRepartition = new Chart(ctx2, {
+    type: 'doughnut',
+    data: {
+      labels: ['Versements nets', 'Gains nets', 'Fiscalité sortie'],
+      datasets: [{
+        data: [Math.max(0, versNet - impotSortie), Math.max(0, gainsN - pfuGains - psGains), tax],
+        backgroundColor: ['#1e3a5f', '#2563eb', '#f59e0b'],
+        borderWidth: 0,
+        hoverOffset: 8,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${fmtE(ctx.raw)}` } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function capitalize(s) {
+  const m = { celibataire:'Célibataire', marie:'Marié(e)', pacse:'Pacsé(e)', divorce:'Divorcé(e)', veuf:'Veuf(ve)',
+               salarie:'Salarié', tns:'TNS', gerant:'Gérant ass. sal.', agriculteur:'Agriculteur', retraite:'Retraité' };
+  return m[s] || s;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.getElementById('enfants').addEventListener('input', updateParts);
+document.getElementById('parts').removeAttribute('readonly');
+
+// Init affichage
+updateParts();
+document.getElementById('res-date').querySelector('span').textContent =
+  new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+
+</script>
+</body>
+</html>
