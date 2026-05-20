@@ -198,6 +198,47 @@
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 
+  /* ── SCÉNARIOS ── */
+  .scenarios-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 4px; }
+  @media (max-width: 640px) { .scenarios-grid { grid-template-columns: 1fr; } }
+
+  .scenario-card {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 18px;
+    cursor: pointer;
+    transition: all .18s;
+    background: white;
+    position: relative;
+  }
+  .scenario-card:hover { border-color: var(--primary-light); transform: translateY(-2px); box-shadow: var(--shadow); }
+  .scenario-card.selected { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(30,58,95,0.12); }
+  .scenario-card.recommended { border-color: var(--success); }
+  .scenario-card.recommended.selected { box-shadow: 0 0 0 3px rgba(5,150,105,0.15); }
+
+  .sc-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 0.68rem; font-weight: 700; margin-bottom: 12px;
+    letter-spacing: 0.03em;
+  }
+  .sc-badge-green  { background: var(--success-light); color: var(--success); }
+  .sc-badge-blue   { background: #dbeafe; color: #1e40af; }
+  .sc-badge-amber  { background: var(--accent-light); color: #92400e; }
+
+  .sc-amount { font-size: 1.8rem; font-weight: 900; color: var(--primary); line-height: 1.1; margin-bottom: 4px; }
+  .sc-saving { font-size: 0.88rem; font-weight: 700; color: var(--success); margin-bottom: 3px; }
+  .sc-cout   { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px; }
+  .sc-desc   { font-size: 0.78rem; color: var(--text-muted); line-height: 1.4; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 6px; }
+
+  .sc-check {
+    position: absolute; top: 12px; right: 12px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--primary); color: white;
+    font-size: 0.65rem; display: none;
+    align-items: center; justify-content: center; font-weight: 700;
+  }
+  .scenario-card.selected .sc-check { display: flex; }
+
   /* ── UPLOAD ZONE ── */
   .upload-zone {
     border: 2.5px dashed var(--border);
@@ -602,38 +643,14 @@
     <div class="card-title">Vos objectifs retraite</div>
     <div class="card-subtitle">Ces paramètres permettent de comparer la fiscalité à l'entrée et à la sortie, et d'identifier la meilleure stratégie.</div>
 
+    <div class="info-box success" style="margin-bottom:20px;">
+      <strong>Le montant optimal est calculé automatiquement</strong> à partir de votre fiscalité réelle. Nous vous présenterons plusieurs scénarios chiffrés avec la recommandation la plus avantageuse.
+    </div>
+
     <div class="form-grid">
       <div class="field">
         <label>Âge de départ à la retraite prévu</label>
         <input type="number" id="age-retraite" placeholder="ex : 65" min="50" max="80" value="65">
-      </div>
-      <div class="field">
-        <label>Montant à verser sur votre PER en 2024</label>
-        <input type="number" id="montant-versement" placeholder="ex : 5000" min="0">
-        <div class="hint">Montant <b>supplémentaire</b> envisagé cette année</div>
-      </div>
-    </div>
-
-    <hr class="divider">
-    <div class="section-title">Mode de sortie souhaité à la retraite</div>
-
-    <div class="field" style="margin-bottom:20px">
-      <div class="toggle-group" id="toggle-sortie">
-        <button class="toggle-btn active" data-val="capital" onclick="setSortie(this)">Sortie en capital</button>
-        <button class="toggle-btn" data-val="rente" onclick="setSortie(this)">Sortie en rente</button>
-        <button class="toggle-btn" data-val="mixte" onclick="setSortie(this)">Mixte (capital + rente)</button>
-        <button class="toggle-btn" data-val="inconnu" onclick="setSortie(this)">Je ne sais pas encore</button>
-      </div>
-    </div>
-
-    <hr class="divider">
-    <div class="section-title">Fiscalité estimée à la retraite</div>
-
-    <div class="form-grid">
-      <div class="field">
-        <label>Revenus estimés à la retraite <span>(annuel)</span></label>
-        <input type="number" id="revenus-retraite" placeholder="ex : 30000" min="0">
-        <div class="hint">Pensions, loyers, autres revenus à la retraite. Laissez vide si inconnu.</div>
       </div>
       <div class="field">
         <label>Taux de rendement annuel estimé</label>
@@ -643,21 +660,30 @@
           <option value="0.06">Dynamique — 6% / an</option>
           <option value="0.08">Offensif — 8% / an</option>
         </select>
-        <div class="hint">Taux de rendement moyen hypothétique du PER</div>
       </div>
     </div>
 
     <hr class="divider">
-    <div class="section-title">Option fiscale pour vos versements</div>
+    <div class="section-title">Mode de sortie souhaité à la retraite</div>
 
-    <div class="field">
-      <label>Souhaitez-vous déduire vos versements de vos revenus ?</label>
-      <div class="toggle-group" id="toggle-deduction">
-        <button class="toggle-btn active" data-val="oui" onclick="setDeduction(this)">Oui — je déduis (recommandé si TMI ≥ 30%)</button>
-        <button class="toggle-btn" data-val="non" onclick="setDeduction(this)">Non — je ne déduis pas</button>
-        <button class="toggle-btn" data-val="comparer" onclick="setDeduction(this)">Je veux comparer les deux</button>
+    <div class="field" style="margin-bottom:20px">
+      <div class="toggle-group" id="toggle-sortie">
+        <button class="toggle-btn active" data-val="capital" onclick="setSortie(this)">Capital</button>
+        <button class="toggle-btn" data-val="rente" onclick="setSortie(this)">Rente viagère</button>
+        <button class="toggle-btn" data-val="mixte" onclick="setSortie(this)">Mixte</button>
+        <button class="toggle-btn" data-val="inconnu" onclick="setSortie(this)">Je ne sais pas encore</button>
       </div>
-      <div class="hint" style="margin-top:8px">La non-déduction peut être intéressante si votre TMI actuelle est basse ou si votre TMI à la retraite sera élevée.</div>
+    </div>
+
+    <hr class="divider">
+    <div class="section-title">Revenus estimés à la retraite <span style="font-weight:400;color:var(--text-muted)">(pour comparer la fiscalité entrée / sortie)</span></div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>Revenus annuels estimés à la retraite</label>
+        <input type="number" id="revenus-retraite" placeholder="ex : 25000" min="0">
+        <div class="hint">Pensions de retraite, loyers, etc. Laissez vide si inconnu — une estimation sera faite (60% des revenus actuels).</div>
+      </div>
     </div>
 
     <div class="alert alert-error" id="alert-4"></div>
@@ -701,80 +727,87 @@
     </div>
   </div>
 
-  <!-- ÉCONOMIE -->
-  <div class="results-grid">
-    <div class="result-card highlight">
-      <div class="rc-label">Économie d'impôt immédiate</div>
-      <div class="rc-value" id="res-economie">—</div>
-      <div class="rc-sub" id="res-economie-sub">Sur votre versement envisagé</div>
-      <div class="rc-badge badge-green" id="res-tmi-badge" style="background:rgba(255,255,255,0.2);color:white;">TMI —</div>
-    </div>
-    <div class="result-card">
-      <div class="rc-label">Coût réel après avantage fiscal</div>
-      <div class="rc-value" id="res-cout-reel">—</div>
-      <div class="rc-sub" id="res-cout-sub">Votre versement net d'impôt</div>
-      <div class="rc-badge badge-blue" id="res-versement-badge">Versement —</div>
-    </div>
+  <!-- SCÉNARIOS OPTIMAUX -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">Montants optimaux calculés</div>
+    <div class="card-subtitle" id="res-scenarios-subtitle">Basés sur votre fiscalité réelle · cliquez sur un scénario pour voir le détail</div>
+    <div id="res-scenarios-grid" class="scenarios-grid"></div>
   </div>
 
-  <div class="results-grid">
-    <div class="result-card">
-      <div class="rc-label">Capital brut à la retraite</div>
-      <div class="rc-value" id="res-capital-brut">—</div>
-      <div class="rc-sub" id="res-capital-sub">Projection à <span id="res-age-retraite-label">—</span> ans</div>
-    </div>
-    <div class="result-card">
-      <div class="rc-label">Capital net après fiscalité sortie</div>
-      <div class="rc-value" id="res-capital-net">—</div>
-      <div class="rc-sub" id="res-capital-net-sub">Versements + gains nets d'impôt</div>
-    </div>
-  </div>
+  <!-- DÉTAIL DU SCÉNARIO SÉLECTIONNÉ -->
+  <div id="bloc-detail" style="display:none;">
 
-  <!-- TABLEAU COMPARATIF -->
-  <div class="card" id="bloc-comparaison" style="margin-bottom:20px; display:none;">
-    <div class="card-title">Comparaison : Déduction vs. Non-déduction</div>
-    <div class="card-subtitle">Pour un versement identique, voici l'impact fiscal à l'entrée et à la sortie.</div>
-    <div style="overflow-x:auto;">
-      <table class="compare-table">
-        <thead>
-          <tr>
-            <th>Élément</th>
-            <th class="col-with">Avec déduction</th>
-            <th class="col-without">Sans déduction</th>
-          </tr>
-        </thead>
-        <tbody id="res-compare-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- RECOMMANDATION -->
-  <div class="reco-card" id="res-reco-card">
-    <div class="reco-header">
-      <div class="reco-icon" id="reco-icon">💡</div>
-      <div>
-        <div class="reco-title" id="reco-title">Recommandation</div>
-        <div class="reco-subtitle" id="reco-subtitle"></div>
+    <div class="results-grid">
+      <div class="result-card highlight">
+        <div class="rc-label">Économie d'impôt immédiate</div>
+        <div class="rc-value" id="res-economie">—</div>
+        <div class="rc-sub" id="res-economie-sub">Réduction d'impôt sur le revenu</div>
+        <div class="rc-badge" id="res-tmi-badge" style="background:rgba(255,255,255,0.2);color:white;">TMI —</div>
+      </div>
+      <div class="result-card">
+        <div class="rc-label">Coût réel après économie fiscale</div>
+        <div class="rc-value" id="res-cout-reel">—</div>
+        <div class="rc-sub" id="res-cout-sub">Ce que ce versement vous coûte réellement</div>
+        <div class="rc-badge badge-blue" id="res-versement-badge">Versement —</div>
       </div>
     </div>
-    <div class="reco-points" id="reco-points"></div>
-  </div>
 
-  <!-- GRAPHIQUES -->
-  <div class="two-col" style="margin-bottom:20px;">
-    <div class="card">
-      <div class="card-title" style="font-size:0.95rem;">Évolution du capital</div>
-      <div class="chart-container">
-        <canvas id="chart-evolution"></canvas>
+    <div class="results-grid">
+      <div class="result-card">
+        <div class="rc-label">Capital brut projeté à la retraite</div>
+        <div class="rc-value" id="res-capital-brut">—</div>
+        <div class="rc-sub">Dans <span id="res-age-retraite-label">—</span> ans · rendement <span id="res-rendement-label">—</span>%/an</div>
+      </div>
+      <div class="result-card">
+        <div class="rc-label">Capital net après fiscalité sortie</div>
+        <div class="rc-value" id="res-capital-net">—</div>
+        <div class="rc-sub" id="res-capital-net-sub">Après IR + prélèvements sociaux</div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title" style="font-size:0.95rem;">Répartition à la sortie</div>
-      <div class="chart-container">
-        <canvas id="chart-repartition"></canvas>
+
+    <!-- COMPARAISON DÉDUCTION / NON DÉDUCTION -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">Déduction vs. Non-déduction</div>
+      <div class="card-subtitle">Comparaison pour ce même versement — avec votre TMI actuelle et estimée à la retraite</div>
+      <div style="overflow-x:auto;">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Élément</th>
+              <th class="col-with">Avec déduction <span style="font-weight:400;font-size:0.7rem;">(recommandé)</span></th>
+              <th class="col-without">Sans déduction</th>
+            </tr>
+          </thead>
+          <tbody id="res-compare-body"></tbody>
+        </table>
       </div>
     </div>
-  </div>
+
+    <!-- RECOMMANDATION -->
+    <div class="reco-card" id="res-reco-card">
+      <div class="reco-header">
+        <div class="reco-icon" id="reco-icon">💡</div>
+        <div>
+          <div class="reco-title" id="reco-title">Recommandation</div>
+          <div class="reco-subtitle" id="reco-subtitle"></div>
+        </div>
+      </div>
+      <div class="reco-points" id="reco-points"></div>
+    </div>
+
+    <!-- GRAPHIQUES -->
+    <div class="two-col" style="margin-bottom:20px;">
+      <div class="card">
+        <div class="card-title" style="font-size:0.95rem;">Évolution du capital</div>
+        <div class="chart-container"><canvas id="chart-evolution"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="font-size:0.95rem;">Répartition à la sortie</div>
+        <div class="chart-container"><canvas id="chart-repartition"></canvas></div>
+      </div>
+    </div>
+
+  </div><!-- /bloc-detail -->
 
   <!-- POINTS D'ATTENTION -->
   <div class="card" id="res-attention" style="margin-bottom:20px;">
@@ -878,7 +911,6 @@ function validateStep(n) {
     const ageR = parseInt(val('age-retraite'));
     const ageA = parseInt(val('age'));
     if (!ageR || ageR <= ageA) { showAlert('alert-4', 'L\'âge de retraite doit être supérieur à votre âge actuel.'); return false; }
-    if (!numVal('montant-versement')) { showAlert('alert-4', 'Veuillez saisir le montant du versement envisagé.'); return false; }
     return true;
   }
   return true;
@@ -992,6 +1024,72 @@ function calcPlafondTNS(revenusPro) {
 }
 
 // ============================================================
+// CALCUL DES SCÉNARIOS OPTIMAUX
+// ============================================================
+function calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, irBase) {
+  const SEUILS = [180294, 83823, 29315, 11497, 0];
+  const scenarios = [];
+  const qi = revenuImposable / nbParts;
+
+  // ── A : Passage de tranche — rendement fiscal maximum par euro ──
+  if (tmi > 0.11 && plafondDisponible >= 500) {
+    const bracketFloor = SEUILS.find(s => qi > s) ?? 0;
+    const amountToFloor = Math.ceil((qi - bracketFloor) * nbParts) + 50;
+    const cappedA = Math.min(amountToFloor, plafondDisponible);
+    const irAfterA = calculateIR(Math.max(0, revenuImposable - cappedA), nbParts);
+    const savingsA = irBase - irAfterA;
+    const newTMI   = getTMI(Math.max(0, revenuImposable - cappedA - 1), nbParts);
+    scenarios.push({
+      id: 'tranche', label: 'Optimisation de tranche',
+      badge: '⭐ Recommandé', badgeClass: 'sc-badge-green',
+      amount: cappedA, savings: savingsA, recommended: true,
+      desc: `Fait passer votre TMI de ${(tmi*100).toFixed(0)}% → ${(newTMI*100).toFixed(0)}% : rendement fiscal maximal par euro investi.`,
+    });
+  }
+
+  // ── B : Plafond complet — économie absolue maximale ──────────────
+  if (plafondDisponible >= 500) {
+    const irAfterB = calculateIR(Math.max(0, revenuImposable - plafondDisponible), nbParts);
+    const savingsB = irBase - irAfterB;
+    const alreadySame = scenarios.find(s => Math.abs(s.amount - plafondDisponible) < 200);
+    if (!alreadySame) {
+      scenarios.push({
+        id: 'max', label: 'Plafond maximal',
+        badge: tmi >= 0.30 ? '💎 Impact maximum' : '📊 Plafond complet',
+        badgeClass: tmi >= 0.30 ? 'sc-badge-blue' : 'sc-badge-amber',
+        amount: plafondDisponible, savings: savingsB,
+        recommended: tmi >= 0.30 && scenarios.length === 0,
+        desc: `Utilise la totalité de votre enveloppe disponible — économie d'impôt maximale en valeur absolue.`,
+      });
+    }
+  }
+
+  // ── C : Effort équilibré — moitié du plafond arrondie ───────────
+  if (plafondDisponible > 2000 && scenarios.length < 3) {
+    const amountC = Math.round(plafondDisponible / 2 / 500) * 500;
+    const irAfterC = calculateIR(Math.max(0, revenuImposable - amountC), nbParts);
+    const savingsC = irBase - irAfterC;
+    const alreadyCovered = scenarios.find(s => Math.abs(s.amount - amountC) < 500);
+    if (!alreadyCovered && amountC >= 500) {
+      scenarios.push({
+        id: 'equilibre', label: 'Effort équilibré',
+        badge: '🔸 Alternative', badgeClass: 'sc-badge-amber',
+        amount: amountC, savings: savingsC, recommended: false,
+        desc: `Environ la moitié du plafond disponible — bonne économie fiscale avec un effort d'épargne mesuré.`,
+      });
+    }
+  }
+
+  if (scenarios.length > 0 && !scenarios.find(s => s.recommended))
+    scenarios[0].recommended = true;
+
+  return scenarios;
+}
+
+// Contexte global partagé entre calculate() et selectScenario()
+let _ctx = {};
+
+// ============================================================
 // CALCUL PRINCIPAL
 // ============================================================
 function calculate() {
@@ -1004,7 +1102,6 @@ function calculate() {
   const ageRet    = parseInt(val('age-retraite')) || 65;
   const annees    = ageRet - age;
   const rendement = parseFloat(val('taux-rendement')) || 0.04;
-  const versement = numVal('montant-versement');
   const deja      = numVal('versements-deja');
   const valeurPER = numVal('valeur-per');
 
@@ -1059,117 +1156,143 @@ function calculate() {
     revenuImposable = netImpSalarie + netImpConj + revFonciers + autresRev;
   }
 
-  const tmi = getTMI(revenuImposable, nbParts);
-  const irAvant = calculateIR(revenuImposable, nbParts);
-  const versEffectif = Math.min(versement, plafondDisponible);
-  const revApresDeduction = Math.max(0, revenuImposable - versEffectif);
-  const irApres = calculateIR(revApresDeduction, nbParts);
-  const economieIR = irAvant - irApres;
+  const tmi    = getTMI(revenuImposable, nbParts);
+  const irBase = calculateIR(revenuImposable, nbParts);
 
-  // --- TMI à la retraite ---
-  let tmiRet = 0;
-  if (revRetEstime > 0) {
-    tmiRet = getTMI(revRetEstime, nbParts);
-  } else {
-    // Estimation empirique: 60% du revenu actuel
-    const revRetEstAuto = revenuImposable * 0.60;
-    tmiRet = getTMI(revRetEstAuto, nbParts);
-  }
+  // TMI à la retraite
+  const revRetEstime = numVal('revenus-retraite') || 0;
+  const tmiRet = revRetEstime > 0
+    ? getTMI(revRetEstime, nbParts)
+    : getTMI(revenuImposable * 0.60, nbParts);
 
-  // --- Projection capital ---
-  const capitalBrut = versEffectif * Math.pow(1 + rendement, annees);
-  const gainsNets   = capitalBrut - versEffectif;
+  // Scénarios optimaux
+  const scenarios = calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, irBase);
 
-  // Avec déduction — sortie capital
-  const impotSortieAD  = versEffectif * tmiRet;  // IR sur versements (RVTG sans abat 10% sur capital)
-  const pfuGains       = gainsNets * 0.128;
-  const psGains        = gainsNets * 0.172;
-  const capitalNetAD   = capitalBrut - impotSortieAD - pfuGains - psGains;
+  // Stocker le contexte global
+  _ctx = { prenom, age, nbParts, ageRet, annees, rendement, tmi, tmiRet, irBase,
+           revenuImposable, plafondDisponible, plafondAnnuel, plafondAnnuelConj,
+           reportN1, reportN2, reportN3, reportConj, deja, scenarios,
+           salarieSuffix: state.statut==='tns'||state.statut==='agriculteur'?'TNS/Agri':'Salarié',
+           isTNS: state.statut==='tns'||state.statut==='agriculteur',
+           isCouple: state.situation==='marie'||state.situation==='pacse' };
 
-  // Sans déduction — sortie capital
-  const capitalNetSD   = capitalBrut - pfuGains - psGains; // versements non taxés
-
-  // Valeur PER projetée (existante + nouveau versement)
-  const capitalTotal = (valeurPER * Math.pow(1 + rendement, annees)) + capitalBrut;
-
-  // --- Affichage résultats ---
+  // --- Navigation ---
   goToStep(5);
 
-  // En-tête
+  // En-tête rapport
   const dateStr = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
   document.getElementById('res-client-name').textContent = `Simulation PER — ${prenom}`;
   document.getElementById('res-date').innerHTML = `Analyse du <span>${dateStr}</span>`;
-
-  // Tags profil
-  const tagsDiv = document.getElementById('res-profil-tags');
-  tagsDiv.innerHTML = [
+  document.getElementById('res-profil-tags').innerHTML = [
     `<span class="tag tag-blue">${capitalize(state.statut)}</span>`,
     `<span class="tag tag-blue">${capitalize(state.situation)}</span>`,
     `<span class="tag tag-blue">${nbParts} part${nbParts > 1 ? 's' : ''}</span>`,
-    `<span class="tag tag-amber">TMI ${(tmi*100).toFixed(0)}%</span>`,
-    `<span class="tag tag-green">Retraite à ${ageRet} ans</span>`,
-    `<span class="tag tag-green">Horizon ${annees} ans</span>`,
+    `<span class="tag tag-amber">TMI actuelle ${(tmi*100).toFixed(0)}%</span>`,
+    `<span class="tag tag-amber">TMI retraite estimée ${(tmiRet*100).toFixed(0)}%</span>`,
+    `<span class="tag tag-green">Retraite à ${ageRet} ans · horizon ${annees} ans</span>`,
   ].join('');
 
   // Plafond breakdown
-  const detailDiv = document.getElementById('res-plafond-detail');
-  detailDiv.innerHTML = `
-    <div class="plafond-row"><span class="pl-label">Plafond annuel ${state.statut==='tns'||state.statut==='agriculteur'?'TNS/Agri':'Salarié'} (basé ${state.statut==='tns'?'revenus 2024':'revenus 2023'})</span><span class="pl-value">${fmtE(plafondAnnuel)}</span></div>
-    ${(state.situation==='marie'||state.situation==='pacse') ? `<div class="plafond-row"><span class="pl-label">Plafond annuel conjoint</span><span class="pl-value">${fmtE(plafondAnnuelConj)}</span></div>` : ''}
+  document.getElementById('res-plafond-detail').innerHTML = `
+    <div class="plafond-row"><span class="pl-label">Plafond annuel ${_ctx.salarieSuffix} (revenus ${_ctx.isTNS?'2024':'2023'})</span><span class="pl-value">${fmtE(plafondAnnuel)}</span></div>
+    ${_ctx.isCouple ? `<div class="plafond-row"><span class="pl-label">Plafond annuel conjoint</span><span class="pl-value">${fmtE(plafondAnnuelConj)}</span></div>` : ''}
     <div class="plafond-row"><span class="pl-label">Report N-1 (2023)</span><span class="pl-value">${fmtE(reportN1)}</span></div>
     <div class="plafond-row"><span class="pl-label">Report N-2 (2022)</span><span class="pl-value">${fmtE(reportN2)}</span></div>
     <div class="plafond-row"><span class="pl-label">Report N-3 (2021)</span><span class="pl-value">${fmtE(reportN3)}</span></div>
-    ${(state.situation==='marie'||state.situation==='pacse') ? `<div class="plafond-row"><span class="pl-label">Reports conjoint (N-1 à N-3)</span><span class="pl-value">${fmtE(reportConj)}</span></div>` : ''}
-    <div class="plafond-row total"><span class="pl-label">Total disponible</span><span class="pl-value">${fmtE(plafondDisponible + deja)}</span></div>
+    ${_ctx.isCouple ? `<div class="plafond-row"><span class="pl-label">Reports conjoint (N-1 à N-3)</span><span class="pl-value">${fmtE(reportConj)}</span></div>` : ''}
+    <div class="plafond-row total"><span class="pl-label">Total brut disponible</span><span class="pl-value">${fmtE(plafondDisponible + deja)}</span></div>
     ${deja > 0 ? `<div class="plafond-row used"><span class="pl-label">Déjà versé en 2024</span><span class="pl-value">− ${fmtE(deja)}</span></div>` : ''}
-    <div class="plafond-row available"><span class="pl-label">🟢 Reste à utiliser</span><span class="pl-value">${fmtE(plafondDisponible)}</span></div>
-  `;
+    <div class="plafond-row available"><span class="pl-label">🟢 Reste à utiliser</span><span class="pl-value">${fmtE(plafondDisponible)}</span></div>`;
   document.getElementById('res-plafond-dispo').textContent = fmtE(plafondDisponible);
 
-  // Économie
+  // Sous-titre scénarios
+  document.getElementById('res-scenarios-subtitle').textContent =
+    tmi === 0
+      ? 'Vous n\'êtes pas imposable — la déduction PER n\'a pas d\'impact fiscal immédiat.'
+      : `TMI actuelle ${(tmi*100).toFixed(0)}% · TMI retraite estimée ${(tmiRet*100).toFixed(0)}% · Plafond disponible ${fmtE(plafondDisponible)} · Cliquez sur un scénario pour voir le détail complet`;
+
+  // Cartes scénarios
+  const grid = document.getElementById('res-scenarios-grid');
+  grid.innerHTML = scenarios.map(s => `
+    <div class="scenario-card ${s.recommended ? 'recommended' : ''}" id="sc-${s.id}" onclick="selectScenario('${s.id}')">
+      <div class="sc-check">✓</div>
+      <div><span class="sc-badge ${s.badgeClass}">${s.badge}</span></div>
+      <div class="sc-amount">${fmtE(s.amount)}</div>
+      <div class="sc-saving">Économie IR : ${fmtE(s.savings)}</div>
+      <div class="sc-cout">Coût réel : ${fmtE(s.amount - s.savings)}</div>
+      <div class="sc-desc">${s.desc}</div>
+    </div>`).join('');
+
+  // Points d'attention
+  buildAttention(tmi, tmiRet, plafondDisponible, scenarios[0]?.amount || 0, annees, state.sortie);
+
+  // Sélection auto du scénario recommandé
+  const recommended = scenarios.find(s => s.recommended) || scenarios[0];
+  if (recommended) selectScenario(recommended.id);
+}
+
+// ============================================================
+// SÉLECTION D'UN SCÉNARIO — affiche le détail complet
+// ============================================================
+function selectScenario(id) {
+  const s = _ctx.scenarios.find(s => s.id === id);
+  if (!s) return;
+
+  // Highlight carte
+  document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById('sc-' + id);
+  if (card) card.classList.add('selected');
+
+  const { annees, rendement, tmi, tmiRet, irBase, revenuImposable, nbParts, prenom } = _ctx;
+  const versement  = s.amount;
+  const economieIR = s.savings;
+  const capitalBrut = versement * Math.pow(1 + rendement, annees);
+  const gains       = capitalBrut - versement;
+  const pfuGains    = gains * 0.128;
+  const psGains     = gains * 0.172;
+  const impotSortieAD = versement * tmiRet;
+  const capitalNetAD  = capitalBrut - impotSortieAD - pfuGains - psGains;
+  const capitalNetSD  = capitalBrut - pfuGains - psGains;
+
+  // Afficher le bloc détail
+  document.getElementById('bloc-detail').style.display = 'block';
+  card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // KPIs
   document.getElementById('res-economie').textContent = fmtE(economieIR);
-  document.getElementById('res-economie-sub').textContent = `Sur un versement de ${fmtE(versEffectif)}`;
+  document.getElementById('res-economie-sub').textContent = `Réduction immédiate pour un versement de ${fmtE(versement)}`;
   document.getElementById('res-tmi-badge').textContent = `TMI ${(tmi*100).toFixed(0)}%`;
-  document.getElementById('res-cout-reel').textContent = fmtE(versEffectif - economieIR);
-  document.getElementById('res-cout-sub').textContent = `Versement ${fmtE(versEffectif)} − économie ${fmtE(economieIR)}`;
-  document.getElementById('res-versement-badge').textContent = `Versement ${fmtE(versEffectif)}`;
-
-  // Capital
+  document.getElementById('res-cout-reel').textContent = fmtE(versement - economieIR);
+  document.getElementById('res-cout-sub').textContent = `${fmtE(versement)} versé − ${fmtE(economieIR)} d'économie fiscale`;
+  document.getElementById('res-versement-badge').textContent = `Versement ${fmtE(versement)}`;
   document.getElementById('res-capital-brut').textContent = fmtE(capitalBrut);
-  document.getElementById('res-capital-sub').textContent = `Dans ${annees} ans · rendement ${(rendement*100).toFixed(0)}%/an`;
-  document.getElementById('res-age-retraite-label').textContent = ageRet;
-  const capNetShow = state.deduction === 'non' ? capitalNetSD : capitalNetAD;
-  document.getElementById('res-capital-net').textContent = fmtE(capNetShow);
-  document.getElementById('res-capital-net-sub').textContent = state.deduction === 'non'
-    ? 'Sans déduction — versements non taxés à la sortie'
-    : 'Avec déduction — versements imposés au barème à la sortie';
+  document.getElementById('res-age-retraite-label').textContent = _ctx.ageRet;
+  document.getElementById('res-rendement-label').textContent = (rendement*100).toFixed(0);
+  document.getElementById('res-capital-net').textContent = fmtE(capitalNetAD);
+  document.getElementById('res-capital-net-sub').textContent =
+    `Avec déduction · TMI sortie ${(tmiRet*100).toFixed(0)}% · PFU 12,8% + PS 17,2% sur gains`;
 
-  // Tableau comparatif
-  if (state.deduction === 'comparer') {
-    document.getElementById('bloc-comparaison').style.display = 'block';
-    const tbl = document.getElementById('res-compare-body');
-    const rows = [
-      ['Versement sur le PER', fmtE(versEffectif), fmtE(versEffectif)],
-      ['Économie d\'impôt immédiate', `<span class="positive">+ ${fmtE(economieIR)}</span>`, '<span style="color:var(--text-muted)">0 €</span>'],
-      ['Coût réel (net d\'économie)', fmtE(versEffectif - economieIR), fmtE(versEffectif)],
-      ['Capital brut projeté à la retraite', fmtE(capitalBrut), fmtE(capitalBrut)],
-      [`IR sur versements à la sortie (TMI ret. ${(tmiRet*100).toFixed(0)}%)`, `<span class="negative">− ${fmtE(impotSortieAD)}</span>`, '<span style="color:var(--text-muted)">0 €</span>'],
-      ['PFU 12,8% sur plus-values', `<span class="negative">− ${fmtE(pfuGains)}</span>`, `<span class="negative">− ${fmtE(pfuGains)}</span>`],
-      ['PS 17,2% sur plus-values', `<span class="negative">− ${fmtE(psGains)}</span>`, `<span class="negative">− ${fmtE(psGains)}</span>`],
-    ];
-    tbl.innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td class="val">${r[1]}</td><td class="val">${r[2]}</td></tr>`).join('')
-      + `<tr class="total"><td><b>Capital net</b></td><td class="val best">${fmtE(capitalNetAD)}</td><td class="val">${fmtE(capitalNetSD)}</td></tr>`
-      + `<tr class="total"><td><b>Gain vs. coût réel</b></td><td class="val ${capitalNetAD > (versEffectif-economieIR) ? 'best' : ''}">${fmtE(capitalNetAD - (versEffectif-economieIR))}</td><td class="val ${capitalNetSD > versEffectif ? 'best' : ''}">${fmtE(capitalNetSD - versEffectif)}</td></tr>`;
-  }
+  // Tableau déduction vs non-déduction
+  const tbl = document.getElementById('res-compare-body');
+  const rows = [
+    ['Versement sur le PER', fmtE(versement), fmtE(versement)],
+    ['Économie d\'impôt immédiate', `<span class="positive">+ ${fmtE(economieIR)}</span>`, '<span style="color:var(--text-muted)">0 €</span>'],
+    ['Coût réel net d\'impôt', `<b>${fmtE(versement - economieIR)}</b>`, `<b>${fmtE(versement)}</b>`],
+    ['Capital brut à la retraite', fmtE(capitalBrut), fmtE(capitalBrut)],
+    [`IR versements sortie (TMI ${(tmiRet*100).toFixed(0)}%)`, `<span class="negative">− ${fmtE(impotSortieAD)}</span>`, '<span style="color:var(--text-muted)">0 €</span>'],
+    ['PFU 12,8% sur plus-values', `<span class="negative">− ${fmtE(pfuGains)}</span>`, `<span class="negative">− ${fmtE(pfuGains)}</span>`],
+    ['PS 17,2% sur plus-values', `<span class="negative">− ${fmtE(psGains)}</span>`, `<span class="negative">− ${fmtE(psGains)}</span>`],
+  ];
+  tbl.innerHTML = rows.map(r =>
+    `<tr><td>${r[0]}</td><td class="val">${r[1]}</td><td class="val">${r[2]}</td></tr>`).join('')
+    + `<tr class="total"><td><b>Capital net</b></td><td class="val best col-with">${fmtE(capitalNetAD)}</td><td class="val">${fmtE(capitalNetSD)}</td></tr>`
+    + `<tr class="total"><td><b>Gain net vs. coût réel</b></td><td class="val best">${fmtE(capitalNetAD-(versement-economieIR))}</td><td class="val">${fmtE(capitalNetSD-versement)}</td></tr>`;
 
-  // --- Recommandation ---
-  buildReco(tmi, tmiRet, plafondDisponible, versEffectif, economieIR, capitalNetAD, capitalNetSD, annees, prenom);
+  // Recommandation
+  buildReco(tmi, tmiRet, _ctx.plafondDisponible, versement, economieIR, capitalNetAD, capitalNetSD, annees, prenom);
 
-  // --- Graphiques ---
-  buildCharts(annees, rendement, versEffectif, capitalNetAD, capitalNetSD, impotSortieAD, pfuGains, psGains);
-
-  // --- Points d'attention ---
-  buildAttention(tmi, tmiRet, plafondDisponible, versEffectif, annees, state.sortie);
+  // Graphiques
+  buildCharts(annees, rendement, versement, capitalNetAD, capitalNetSD, impotSortieAD, pfuGains, psGains);
 }
 
 // ============================================================
@@ -1177,37 +1300,39 @@ function calculate() {
 // ============================================================
 function buildReco(tmi, tmiRet, plafondDispo, versement, economieIR, capitalNetAD, capitalNetSD, annees, prenom) {
   let icon, title, subtitle, points = [];
+  const tauxReel = versement > 0 ? ((versement - economieIR) / versement * 100).toFixed(0) : 0;
 
-  const avantageDeduction = capitalNetAD - capitalNetSD + economieIR;
-  const deductionFavorable = tmi > tmiRet || tmi >= 0.30;
-
-  if (deductionFavorable) {
+  if (tmi > tmiRet) {
     icon = '🏆';
-    title = `La déduction fiscale est fortement recommandée, ${prenom}`;
-    subtitle = `Votre TMI actuelle (${(tmi*100).toFixed(0)}%) est supérieure à votre TMI estimée à la retraite (${(tmiRet*100).toFixed(0)}%)`;
+    title = `Déduction fortement recommandée, ${prenom}`;
+    subtitle = `TMI actuelle ${(tmi*100).toFixed(0)}% > TMI retraite estimée ${(tmiRet*100).toFixed(0)}% — vous achetez de l'épargne à prix réduit`;
     points = [
-      `<b>Économie immédiate de ${fmtE(economieIR)}</b> — chaque euro versé vous coûte réellement ${fmtE((versement-economieIR)/versement*100, 1)} centimes net d'impôt.`,
-      `<b>Effet de levier fiscal :</b> en déduisant ${fmtE(versement)}, vous investissez ${fmtE(versement)} mais n'en ressentez que ${fmtE(versement - economieIR)} de manque à gagner.`,
-      plafondDispo > versement ? `<b>Enveloppe non utilisée :</b> vous pouvez encore déduire ${fmtE(plafondDispo - versement)} supplémentaires cette année — profitez-en !` : `<b>Versement optimisé :</b> votre versement utilise pleinement votre plafond disponible.`,
-      annees >= 15 ? `<b>Horizon long (${annees} ans) :</b> la capitalisation sur la durée amplifie l'avantage fiscal. La déduction est d'autant plus pertinente.` : `<b>Horizon ${annees} ans :</b> pensez à équilibrer entre PER et supports liquides pour conserver une épargne accessible.`,
+      `<b>Coût réel de ${tauxReel}% du versement :</b> vous déposez ${fmtE(versement)} sur votre PER mais l'État finance ${fmtE(economieIR)} via la réduction d'impôt immédiate.`,
+      `<b>Arbitrage entrée/sortie favorable :</b> vous déduisez à ${(tmi*100).toFixed(0)}% maintenant et ne paierez que ${(tmiRet*100).toFixed(0)}% à la sortie — ${((tmi-tmiRet)*100).toFixed(0)} points de gain net par euro investi.`,
+      plafondDispo > versement
+        ? `<b>Plafond non épuisé :</b> ${fmtE(plafondDispo - versement)} encore disponibles cette année. Chaque euro supplémentaire rapporte ${(tmi*100).toFixed(0)}% d'économie immédiate.`
+        : `<b>Plafond optimisé :</b> ce scénario utilise pleinement votre enveloppe disponible.`,
+      annees >= 15
+        ? `<b>Horizon ${annees} ans :</b> la capitalisation amplifie encore l'avantage. Le capital net à la retraite est de ${fmtE(capitalNetAD)} pour un coût réel de ${fmtE(versement - economieIR)}.`
+        : `<b>Horizon ${annees} ans :</b> pensez à conserver une épargne liquide en parallèle — le PER est bloqué jusqu'à la retraite.`,
     ];
   } else if (tmi === tmiRet) {
     icon = '⚖️';
-    title = `La déduction reste avantageuse grâce à l'effet de capitalisation`;
-    subtitle = `TMI identique actuellement et à la retraite (${(tmi*100).toFixed(0)}%) — l'avantage vient de la capitalisation des économies d'impôt`;
+    title = `La déduction reste avantageuse malgré une TMI stable`;
+    subtitle = `TMI identique (${(tmi*100).toFixed(0)}%) — le gain vient de la capitalisation des économies d'impôt reinvesties`;
     points = [
-      `<b>TMIs identiques :</b> en apparence neutre, la déduction est en réalité favorable car elle vous permet de placer <b>davantage</b> de capital (les ${fmtE(economieIR)} économisés peuvent être réinvestis).`,
-      `<b>Stratégie mixte possible :</b> déduisez une partie des versements (pour les tranches à 30%+) et ne déduisez pas le reste si votre TMI retombe à 11%.`,
-      plafondDispo > versement ? `<b>Reports disponibles :</b> ${fmtE(plafondDispo - versement)} de plafond non utilisé — à étudier selon votre trésorerie.` : '',
+      `<b>Effet levier de capitalisation :</b> les ${fmtE(economieIR)} économisés aujourd'hui peuvent être réinvestis — vous capitalisez sur une base plus large qu'en dehors du PER.`,
+      `<b>Stratégie mixte possible :</b> déduisez les versements dans la tranche 30%+ et envisagez la non-déduction pour la tranche 11% si votre TMI retraite remonte.`,
+      plafondDispo > versement ? `<b>Plafond disponible :</b> ${fmtE(plafondDispo - versement)} non utilisés — à arbitrer selon votre besoin de liquidité.` : '',
     ].filter(Boolean);
   } else {
     icon = '🔄';
-    title = `Stratégie à adapter — la non-déduction mérite d'être étudiée`;
-    subtitle = `Votre TMI actuelle (${(tmi*100).toFixed(0)}%) est inférieure à la TMI estimée à la retraite (${(tmiRet*100).toFixed(0)}%)`;
+    title = `TMI retraite supérieure — envisagez la non-déduction`;
+    subtitle = `TMI actuelle ${(tmi*100).toFixed(0)}% < TMI retraite estimée ${(tmiRet*100).toFixed(0)}% — la sortie sera plus taxée que l'entrée`;
     points = [
-      `<b>Option sans déduction :</b> vos versements seront exonérés à la sortie en capital, économisant l'IR au moment du déblocage.`,
-      `<b>Cependant :</b> la déduction reste possible et peut être intéressante si votre TMI baisse à la retraite plus que prévu. Revoyez ce calcul avec des projections précises de vos revenus retraite.`,
-      `<b>Recommandation :</b> consultez un conseiller patrimonial pour simuler les deux scenarii avec vos relevés de retraite estimatifs.`,
+      `<b>Option sans déduction :</b> en renonçant à la déduction, vos versements sont exonérés d'IR à la sortie en capital. Fiscalité réduite à PFU 12,8% + PS 17,2% sur les seuls gains.`,
+      `<b>Comparez les deux colonnes du tableau ci-dessus :</b> le capital net "sans déduction" est supérieur dans votre situation — c'est le scénario à privilégier.`,
+      `<b>Conseil :</b> affinez les revenus estimés à la retraite (pensions, loyers…) pour valider cette projection avec votre conseiller.`,
     ];
   }
 
@@ -1239,8 +1364,8 @@ function buildAttention(tmi, tmiRet, plafondDispo, versement, annees, sortie) {
     att.push({ type:'success', text:'<strong>TMI 41% ou 45% :</strong> Votre tranche est très élevée. Maximisez absolument votre plafond PER, et envisagez d\'utiliser également les reports des 3 années précédentes si vous ne l\'avez pas fait.' });
   }
 
-  if (plafondDispo > versement * 2) {
-    att.push({ type:'warning', text:`<strong>Plafond sous-utilisé :</strong> Votre plafond disponible (${fmtE(plafondDispo)}) est bien supérieur à votre versement envisagé. Étudiez la possibilité d\'augmenter votre effort d\'épargne pour maximiser l\'avantage fiscal.` });
+  if (tmi >= 0.30 && plafondDispo > versement) {
+    att.push({ type:'warning', text:`<strong>Plafond non épuisé :</strong> Il vous reste ${fmtE(plafondDispo - versement)} de plafond disponible au-delà du scénario affiché. Chaque euro supplémentaire investi vous économise ${(tmi*100).toFixed(0)}% d'impôt immédiatement.` });
   }
 
   if (annees < 10) {
