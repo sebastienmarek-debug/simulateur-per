@@ -1,41 +1,99 @@
-from flask import Flask, render_template, request, jsonify
 import os
 import io
 import re
+import json
+import base64
+
+from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 15 * 1024 * 1024  # 15 MB max
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25 MB
 
+# ─────────────────────────────────────────────
+# Dépendances optionnelles
+# ─────────────────────────────────────────────
 try:
     import pdfplumber
-    PDF_SUPPORT = True
+    PDFPLUMBER_OK = True
 except ImportError:
-    PDF_SUPPORT = False
+    PDFPLUMBER_OK = False
 
+try:
+    from pdf2image import convert_from_bytes
+    from PIL import Image
+    PDF2IMAGE_OK = True
+except ImportError:
+    PDF2IMAGE_OK = False
+
+try:
+    import anthropic
+    ANTHROPIC_OK = True
+except ImportError:
+    ANTHROPIC_OK = False
 
 # ─────────────────────────────────────────────
-# Extraction de texte
+# Prompt Claude Vision
 # ─────────────────────────────────────────────
+EXTRACTION_PROMPT = """Tu reçois un document fiscal français (avis d'imposition, déclaration 2042, ou photo d'un tel document).
 
-def extract_text_from_pdf(pdf_bytes):
-    """Extrait le texte brut de toutes les pages du PDF."""
-    pages_text = []
+Extrais les données fiscales suivantes et retourne-les dans un JSON strict.
+Si une valeur est absente ou illisible, mets null.
+Ne retourne RIEN d'autre que le JSON — pas de texte, pas d'explication.
+
+{
+  "situation": "celibataire|marie|pacse|divorce|veuf",
+  "parts": <nombre de parts fiscales, ex: 2.5>,
+  "rfr": <revenu fiscal de référence, entier en €>,
+  "revenu_imposable": <revenu net imposable, entier en €>,
+  "salaire_1": <salaires déclarant 1 / case 1AJ, entier en €>,
+  "salaire_2": <salaires déclarant 2 / case 1BJ conjoint, entier en €>,
+  "ir_net": <impôt sur le revenu net, entier en €>,
+  "revenus_tns": <bénéfices BIC/BNC/BA pour TNS/indépendant, entier en €>,
+  "plafond_annuel": <plafond PER disponible année en cours, entier en €>,
+  "report_n1": <plafond PER non utilisé N-1, entier en €>,
+  "report_n2": <plafond PER non utilisé N-2, entier en €>,
+  "report_n3": <plafond PER non utilisé N-3, entier en €>
+}
+
+Indices pour localiser les données :
+- "Situation de famille" ou "Marié/Pacsé/Célibataire" → situation
+- "Nombre de parts" ou "Quotient familial" → parts
+- "Revenu fiscal de référence" ou "RFR" → rfr
+- "Revenu net imposable" → revenu_imposable
+- Case 1AJ (ou "Traitements, salaires") → salaire_1
+- Case 1BJ → salaire_2
+- "Impôt net" ou "Montant de l'impôt" → ir_net
+- "BIC", "BNC", "BA", "bénéfices" → revenus_tns
+- Section "Plafonds de déductibilité épargne retraite" ou "Épargne retraite" → plafond_annuel, report_n1, report_n2, report_n3
+"""
+
+# ─────────────────────────────────────────────
+# Extraction texte (PDF natif — rapide)
+# ─────────────────────────────────────────────
+def extract_text_pdfplumber(pdf_bytes):
+    if not PDFPLUMBER_OK:
+        return ''
+    pages = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for page in pdf.pages:
-            text = page.extract_text(x_tolerance=2, y_tolerance=2) or ''
-            pages_text.append(text)
-    return '\n'.join(pages_text)
+            pages.append(page.extract_text(x_tolerance=2, y_tolerance=2) or '')
+    return '\n'.join(pages)
 
 
+def text_has_content(text, min_chars=200):
+    return len(text.strip()) >= min_chars
+
+
+# ─────────────────────────────────────────────
+# Parseurs regex (pour PDF texte)
+# ─────────────────────────────────────────────
 def clean_number(raw):
-    """Nettoie une chaîne et retourne un entier, ou None."""
-    cleaned = re.sub(r'[\s ]', '', str(raw))  # espaces + espace insécable
+    cleaned = re.sub(r'[\s ]', '', str(raw))
     cleaned = re.sub(r'[^\d]', '', cleaned)
     return int(cleaned) if cleaned else None
 
 
 def find_first(patterns, text, flags=re.IGNORECASE):
-    """Essaie plusieurs patterns, retourne le premier match ou None."""
     for pattern in patterns:
         m = re.search(pattern, text, flags)
         if m:
@@ -43,265 +101,256 @@ def find_first(patterns, text, flags=re.IGNORECASE):
     return None
 
 
-# ─────────────────────────────────────────────
-# Parseurs spécialisés
-# ─────────────────────────────────────────────
+def parse_with_regex(text):
+    data = {}
+    fields_found = []
 
-def parse_situation(text):
-    """Détecte la situation familiale."""
-    m = find_first([
-        r'(mari[eé]e?|pacs[eé]e?|c[eé]libataire|divorc[eé]e?|veuf|veuve)',
-    ], text)
-    if not m:
-        return None
-    s = m.group(1).lower()
-    if 'mari' in s or 'pacs' in s:
-        return 'marie'
-    if 'divorc' in s:
-        return 'divorce'
-    if 'veuf' in s or 'veuve' in s:
-        return 'veuf'
-    return 'celibataire'
+    # Situation familiale
+    m = find_first([r'(mari[eé]e?|pacs[eé]e?|c[eé]libataire|divorc[eé]e?|veuf|veuve)'], text)
+    if m:
+        s = m.group(1).lower()
+        if 'mari' in s or 'pacs' in s:
+            data['situation'] = 'marie'
+        elif 'divorc' in s:
+            data['situation'] = 'divorce'
+        elif 'veuf' in s or 'veuve' in s:
+            data['situation'] = 'veuf'
+        else:
+            data['situation'] = 'celibataire'
+        fields_found.append('Situation familiale')
 
-
-def parse_parts(text):
-    """Extrait le nombre de parts fiscales."""
+    # Parts
     m = find_first([
         r'nombre\s+de\s+parts?\s*(?:du\s+foyer)?\s*[:\s=]+\s*(\d+[,\.]\d+|\d+)',
         r'quotient\s+familial[^\d]*(\d+[,\.]\d+)',
         r'(\d+[,\.]\d+)\s+parts?',
     ], text)
     if m:
-        return float(m.group(1).replace(',', '.'))
-    return None
-
-
-def parse_rfr(text):
-    """Extrait le revenu fiscal de référence."""
-    m = find_first([
-        r'revenu\s+fiscal\s+de\s+r[eé]f[eé]rence\s*[:\s]*(\d[\d\s ]{2,10})',
-        r'r\.f\.r\.?\s*[:\s]*(\d[\d\s ]{2,10})',
-        r'rfr\s*[:\s]*(\d[\d\s ]{2,10})',
-    ], text)
-    if m:
-        return clean_number(m.group(1)[:12])
-    return None
-
-
-def parse_revenu_imposable(text):
-    """Extrait le revenu net imposable."""
-    m = find_first([
-        r'revenu\s+net\s+imposable\s*[:\s]*(\d[\d\s ]{2,10})',
-        r'revenu\s+imposable\s*[:\s]*(\d[\d\s ]{2,10})',
-        r'net\s+imposable\s*[:\s]*(\d[\d\s ]{2,10})',
-    ], text)
-    if m:
-        return clean_number(m.group(1)[:12])
-    return None
-
-
-def parse_salaires(text):
-    """Extrait les salaires déclarés (déclarant 1 et 2)."""
-    result = {}
-
-    # Déclarant 1 — case 1AJ
-    m = find_first([
-        r'1\s*AJ\s*[:\s]*(\d[\d\s ]{2,10})',
-        r'traitements?\s*[,;]\s*salaires?[^\d]{0,40}(\d[\d\s ]{3,10})',
-        r'salaires?\s+d[eé]clar[eé]s?[^\d]{0,20}(\d[\d\s ]{3,10})',
-    ], text)
-    if m:
-        n = clean_number(m.group(1)[:12])
-        if n and n > 1000:
-            result['salaire_1'] = n
-
-    # Déclarant 2 — case 1BJ
-    m = find_first([
-        r'1\s*BJ\s*[:\s]*(\d[\d\s ]{2,10})',
-    ], text)
-    if m:
-        n = clean_number(m.group(1)[:12])
-        if n and n > 1000:
-            result['salaire_2'] = n
-
-    return result
-
-
-def parse_ir_net(text):
-    """Extrait l'impôt sur le revenu net."""
-    m = find_first([
-        r'imp[oô]t\s+(?:sur\s+le\s+revenu\s+)?net\s*[:\s]*(\d[\d\s ]{0,10})',
-        r'imp[oô]t\s+net\s+[àa]\s+payer\s*[:\s]*(\d[\d\s ]{0,10})',
-        r'total\s+(?:de\s+)?l\'imp[oô]t\s*[:\s]*(\d[\d\s ]{0,10})',
-        r'imp[oô]t\s+2\d{3}\s*[:\s]*(\d[\d\s ]{0,10})',
-    ], text)
-    if m:
-        return clean_number(m.group(1)[:10])
-    return None
-
-
-def parse_bic_bnc(text):
-    """Extrait les bénéfices TNS (BIC/BNC/BA)."""
-    result = {}
-    m = find_first([
-        r'b[eé]n[eé]fices?\s+industriels?\s+et\s+commerciaux[^\d]{0,30}(\d[\d\s ]{2,10})',
-        r'BIC\s*[:\s]*(\d[\d\s ]{2,10})',
-        r'b[eé]n[eé]fices?\s+non\s+commerciaux[^\d]{0,30}(\d[\d\s ]{2,10})',
-        r'BNC\s*[:\s]*(\d[\d\s ]{2,10})',
-        r'b[eé]n[eé]fices?\s+agricoles?[^\d]{0,30}(\d[\d\s ]{2,10})',
-        r'BA\s*[:\s]*(\d[\d\s ]{2,10})',
-    ], text)
-    if m:
-        n = clean_number(m.group(1)[:12])
-        if n and n > 1000:
-            result['revenus_tns'] = n
-    return result
-
-
-def parse_plafonds_per(text):
-    """
-    Extrait les plafonds épargne retraite et les reports des années N-1/N-2/N-3.
-    Section généralement intitulée 'PLAFONDS DE DÉDUCTIBILITÉ ÉPARGNE RETRAITE'
-    ou 'Vos plafonds épargne retraite'.
-    """
-    result = {}
-
-    # Localiser la section PER
-    section_match = re.search(
-        r'(?:plafonds?\s+(?:de\s+)?d[eé]ductibilit[eé][^\n]*[eé]pargne[^\n]*retraite'
-        r'|[eé]pargne.{0,5}retraite[^\n]*plafond'
-        r'|plafonds?\s+[eé]pargne\s+retraite)'
-        r'(.{20,1500})',
-        text,
-        re.IGNORECASE | re.DOTALL
-    )
-
-    if not section_match:
-        # Fallback: chercher "épargne retraite" suivi de montants
-        section_match = re.search(
-            r'[eé]pargne\s+retraite(.{20,800})',
-            text,
-            re.IGNORECASE | re.DOTALL
-        )
-
-    if section_match:
-        section = section_match.group(1)
-
-        # Chercher les montants associés aux années
-        year_amounts = re.findall(
-            r'(?:20(\d{2}))[^\d]{0,30}(\d[\d\s ]{1,8})\s*€?',
-            section
-        )
-
-        amounts_by_year = {}
-        for yr_suffix, amount_str in year_amounts:
-            yr = int('20' + yr_suffix)
-            n = clean_number(amount_str)
-            if n and 100 < n < 200000:
-                amounts_by_year[yr] = n
-
-        if amounts_by_year:
-            current = max(amounts_by_year.keys())
-            if current in amounts_by_year:
-                result['plafond_annuel'] = amounts_by_year[current]
-            if (current - 1) in amounts_by_year:
-                result['report_n1'] = amounts_by_year[current - 1]
-            if (current - 2) in amounts_by_year:
-                result['report_n2'] = amounts_by_year[current - 2]
-            if (current - 3) in amounts_by_year:
-                result['report_n3'] = amounts_by_year[current - 3]
-
-        # Fallback: extraire les montants en ordre d'apparition
-        if not result:
-            all_amounts = re.findall(r'(\d[\d\s ]{2,8})\s*€', section)
-            valid = [clean_number(a) for a in all_amounts if clean_number(a) and 100 < clean_number(a) < 200000]
-            if valid:
-                result['plafond_annuel'] = valid[0]
-            if len(valid) > 1:
-                result['report_n1'] = valid[1]
-            if len(valid) > 2:
-                result['report_n2'] = valid[2]
-            if len(valid) > 3:
-                result['report_n3'] = valid[3]
-
-    return result
-
-
-# ─────────────────────────────────────────────
-# Orchestrateur principal
-# ─────────────────────────────────────────────
-
-def parse_avis_imposition(pdf_bytes):
-    """Parse un avis d'imposition ou déclaration 2042 et retourne les champs clés."""
-    text = extract_text_from_pdf(pdf_bytes)
-
-    if len(text.strip()) < 100:
-        raise ValueError(
-            "Le PDF semble être une image scannée (pas de texte extractible). "
-            "Utilisez un PDF natif issu de impots.gouv.fr."
-        )
-
-    data = {}
-    fields_found = []
-
-    # Situation familiale
-    situation = parse_situation(text)
-    if situation:
-        data['situation'] = situation
-        fields_found.append('Situation familiale')
-
-    # Nombre de parts
-    parts = parse_parts(text)
-    if parts:
-        data['parts'] = parts
+        data['parts'] = float(m.group(1).replace(',', '.'))
         fields_found.append('Nombre de parts')
 
     # RFR
-    rfr = parse_rfr(text)
-    if rfr:
-        data['rfr'] = rfr
-        fields_found.append('Revenu fiscal de référence')
+    m = find_first([
+        r'revenu\s+fiscal\s+de\s+r[eé]f[eé]rence\s*[:\s]*(\d[\d\s ]{2,10})',
+        r'r\.f\.r\.?\s*[:\s]*(\d[\d\s ]{2,10})',
+    ], text)
+    if m:
+        n = clean_number(m.group(1)[:12])
+        if n:
+            data['rfr'] = n
+            fields_found.append('Revenu fiscal de référence')
 
     # Revenu imposable
-    rev_imp = parse_revenu_imposable(text)
-    if rev_imp:
-        data['revenu_imposable'] = rev_imp
-        fields_found.append('Revenu net imposable')
+    m = find_first([
+        r'revenu\s+net\s+imposable\s*[:\s]*(\d[\d\s ]{2,10})',
+        r'revenu\s+imposable\s*[:\s]*(\d[\d\s ]{2,10})',
+    ], text)
+    if m:
+        n = clean_number(m.group(1)[:12])
+        if n:
+            data['revenu_imposable'] = n
+            fields_found.append('Revenu net imposable')
 
-    # Salaires
-    salaires = parse_salaires(text)
-    if salaires:
-        data.update(salaires)
-        fields_found.append('Salaires déclarés')
+    # Salaires 1AJ / 1BJ
+    m = find_first([
+        r'1\s*AJ\s*[:\s]*(\d[\d\s ]{2,10})',
+        r'traitements?\s*[,;]\s*salaires?[^\d]{0,40}(\d[\d\s ]{3,10})',
+    ], text)
+    if m:
+        n = clean_number(m.group(1)[:12])
+        if n and n > 1000:
+            data['salaire_1'] = n
+            fields_found.append('Salaires déclarant')
+    m = find_first([r'1\s*BJ\s*[:\s]*(\d[\d\s ]{2,10})'], text)
+    if m:
+        n = clean_number(m.group(1)[:12])
+        if n and n > 1000:
+            data['salaire_2'] = n
+            fields_found.append('Salaires conjoint')
 
     # IR net
-    ir = parse_ir_net(text)
-    if ir is not None:
-        data['ir_net'] = ir
-        fields_found.append('Impôt net')
+    m = find_first([
+        r'imp[oô]t\s+(?:sur\s+le\s+revenu\s+)?net\s*[:\s]*(\d[\d\s ]{0,10})',
+        r'montant\s+(?:de\s+)?l\'imp[oô]t\s*[:\s]*(\d[\d\s ]{0,10})',
+    ], text)
+    if m:
+        n = clean_number(m.group(1)[:10])
+        if n is not None:
+            data['ir_net'] = n
+            fields_found.append('Impôt net')
 
     # BIC/BNC/BA
-    tns = parse_bic_bnc(text)
-    if tns:
-        data.update(tns)
-        fields_found.append('Bénéfices professionnels (TNS)')
+    m = find_first([
+        r'b[eé]n[eé]fices?\s+industriels?[^\d]{0,30}(\d[\d\s ]{2,10})',
+        r'\bBIC\b\s*[:\s]*(\d[\d\s ]{2,10})',
+        r'b[eé]n[eé]fices?\s+non\s+commerciaux[^\d]{0,30}(\d[\d\s ]{2,10})',
+        r'\bBNC\b\s*[:\s]*(\d[\d\s ]{2,10})',
+        r'b[eé]n[eé]fices?\s+agricoles?[^\d]{0,30}(\d[\d\s ]{2,10})',
+    ], text)
+    if m:
+        n = clean_number(m.group(1)[:12])
+        if n and n > 1000:
+            data['revenus_tns'] = n
+            fields_found.append('Bénéfices TNS')
 
     # Plafonds PER
-    plafonds = parse_plafonds_per(text)
-    if plafonds:
-        data.update(plafonds)
-        fields_found.append('Plafonds épargne retraite')
+    section_m = re.search(
+        r'(?:plafonds?\s+(?:de\s+)?d[eé]ductibilit[eé][^\n]*[eé]pargne'
+        r'|[eé]pargne.{0,5}retraite[^\n]*plafond'
+        r'|plafonds?\s+[eé]pargne\s+retraite)(.{20,1200})',
+        text, re.IGNORECASE | re.DOTALL
+    )
+    if not section_m:
+        section_m = re.search(r'[eé]pargne\s+retraite(.{20,600})', text, re.IGNORECASE | re.DOTALL)
+
+    if section_m:
+        section = section_m.group(1)
+        year_amounts = re.findall(r'(?:20(\d{2}))[^\d]{0,30}(\d[\d\s ]{1,8})\s*€?', section)
+        amounts_by_year = {}
+        for yr_s, amt_s in year_amounts:
+            yr = int('20' + yr_s)
+            n = clean_number(amt_s)
+            if n and 100 < n < 200000:
+                amounts_by_year[yr] = n
+        if amounts_by_year:
+            cur = max(amounts_by_year.keys())
+            for key, delta in [('plafond_annuel', 0), ('report_n1', 1), ('report_n2', 2), ('report_n3', 3)]:
+                if (cur - delta) in amounts_by_year:
+                    data[key] = amounts_by_year[cur - delta]
+            fields_found.append('Plafonds épargne retraite')
 
     data['_fields_found'] = fields_found
-    data['_text_length'] = len(text)
+    return data
 
+
+# ─────────────────────────────────────────────
+# Extraction via Claude Vision (scan / image)
+# ─────────────────────────────────────────────
+def image_to_b64(img, max_dim=2000):
+    """Redimensionne si nécessaire et encode en base64 JPEG."""
+    w, h = img.size
+    if max(w, h) > max_dim:
+        ratio = max_dim / max(w, h)
+        img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.convert('RGB').save(buf, format='JPEG', quality=88)
+    return base64.standard_b64encode(buf.getvalue()).decode('utf-8')
+
+
+def extract_with_claude_vision(images_b64):
+    """Envoie les images de pages à Claude claude-sonnet-4-6 pour extraction."""
+    client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+
+    content = []
+    for i, b64 in enumerate(images_b64):
+        content.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+        })
+        if len(images_b64) > 1:
+            content.append({"type": "text", "text": f"— Page {i + 1} —"})
+
+    content.append({"type": "text", "text": EXTRACTION_PROMPT})
+
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": content}],
+    )
+
+    raw = response.content[0].text.strip()
+
+    # Extraire le JSON même si Claude ajoute du texte autour
+    json_match = re.search(r'\{[\s\S]*\}', raw)
+    if not json_match:
+        raise ValueError(f"Réponse Claude non parseable : {raw[:200]}")
+
+    extracted = json.loads(json_match.group())
+
+    # Normaliser et construire _fields_found
+    fields_found = []
+    field_labels = {
+        'situation': 'Situation familiale',
+        'parts': 'Nombre de parts',
+        'rfr': 'Revenu fiscal de référence',
+        'revenu_imposable': 'Revenu net imposable',
+        'salaire_1': 'Salaires déclarant',
+        'salaire_2': 'Salaires conjoint',
+        'ir_net': 'Impôt net',
+        'revenus_tns': 'Bénéfices TNS',
+        'plafond_annuel': 'Plafond PER annuel',
+        'report_n1': 'Report N-1',
+        'report_n2': 'Report N-2',
+        'report_n3': 'Report N-3',
+    }
+    for k, label in field_labels.items():
+        if extracted.get(k) is not None:
+            fields_found.append(label)
+
+    # Nettoyer les null
+    data = {k: v for k, v in extracted.items() if v is not None}
+    data['_fields_found'] = fields_found
+    return data
+
+
+# ─────────────────────────────────────────────
+# Pipeline principal
+# ─────────────────────────────────────────────
+def pdf_to_images(pdf_bytes, dpi=180, max_pages=3):
+    """Convertit les N premières pages d'un PDF en images PIL."""
+    images = convert_from_bytes(pdf_bytes, dpi=dpi, first_page=1, last_page=max_pages)
+    return images
+
+
+def parse_document(file_bytes, filename):
+    """
+    Essaie dans l'ordre :
+    1. pdfplumber (texte natif, instantané)
+    2. Claude Vision sur les pages converties (scan PDF)
+    3. Claude Vision directement (image JPEG/PNG)
+    """
+    ext = os.path.splitext(filename.lower())[1]
+    is_pdf = ext == '.pdf'
+    is_image = ext in ('.jpg', '.jpeg', '.png', '.webp', '.heic', '.bmp', '.tiff', '.tif')
+
+    # ── Étape 1 : PDF avec texte natif ──────────────────────────────
+    if is_pdf and PDFPLUMBER_OK:
+        text = extract_text_pdfplumber(file_bytes)
+        if text_has_content(text, min_chars=300):
+            data = parse_with_regex(text)
+            if len(data.get('_fields_found', [])) >= 3:
+                data['_method'] = 'text'
+                return data
+            # Texte trouvé mais peu de champs → complète avec Vision
+
+    # ── Étape 2 : Vision Claude (PDF converti en images ou image brute) ──
+    if not ANTHROPIC_OK:
+        raise ValueError("Module anthropic non disponible et PDF non lisible en texte.")
+
+    if is_pdf:
+        if not PDF2IMAGE_OK:
+            raise ValueError(
+                "Le PDF semble scanné mais pdf2image n'est pas installé. "
+                "Déposez une image JPEG/PNG à la place."
+            )
+        pil_images = pdf_to_images(file_bytes, dpi=180, max_pages=3)
+        images_b64 = [image_to_b64(img) for img in pil_images]
+
+    elif is_image:
+        img = Image.open(io.BytesIO(file_bytes))
+        images_b64 = [image_to_b64(img)]
+
+    else:
+        raise ValueError(f"Format non supporté : {ext}. Utilisez PDF, JPEG ou PNG.")
+
+    data = extract_with_claude_vision(images_b64)
+    data['_method'] = 'vision'
     return data
 
 
 # ─────────────────────────────────────────────
 # Routes Flask
 # ─────────────────────────────────────────────
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -309,29 +358,35 @@ def index():
 
 @app.route('/parse-pdf', methods=['POST'])
 def parse_pdf():
-    if not PDF_SUPPORT:
-        return jsonify({'error': 'Module pdfplumber non installé sur le serveur.'}), 500
-
     if 'file' not in request.files:
         return jsonify({'error': 'Aucun fichier reçu.'}), 400
 
     f = request.files['file']
-    if not f.filename.lower().endswith('.pdf'):
-        return jsonify({'error': 'Seuls les fichiers PDF sont acceptés.'}), 400
+    filename = f.filename or ''
+    allowed = ('.pdf', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.tif')
+    if not any(filename.lower().endswith(e) for e in allowed):
+        return jsonify({'error': 'Format non supporté. Utilisez PDF, JPEG ou PNG.'}), 400
 
     try:
-        pdf_bytes = f.read()
-        data = parse_avis_imposition(pdf_bytes)
+        file_bytes = f.read()
+        data = parse_document(file_bytes, filename)
+        method = data.pop('_method', 'text')
+        fields_found = data.get('_fields_found', [])
+
         return jsonify({
             'success': True,
             'data': data,
-            'fields_found': data.get('_fields_found', []),
-            'fields_count': len(data.get('_fields_found', [])),
+            'fields_found': fields_found,
+            'fields_count': len(fields_found),
+            'method': method,  # 'text' ou 'vision'
         })
+
+    except json.JSONDecodeError as e:
+        return jsonify({'error': f'Erreur de parsing JSON depuis Claude : {str(e)}'}), 500
     except ValueError as e:
         return jsonify({'error': str(e)}), 422
     except Exception as e:
-        return jsonify({'error': f'Erreur d\'analyse : {str(e)}'}), 500
+        return jsonify({'error': f'Erreur inattendue : {str(e)}'}), 500
 
 
 if __name__ == '__main__':

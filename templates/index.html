@@ -320,11 +320,11 @@
     <div class="card-subtitle">Glissez votre PDF ou cliquez pour le sélectionner — les champs seront pré-remplis automatiquement.</div>
 
     <div class="upload-zone" id="upload-zone" onclick="document.getElementById('pdf-input').click()">
-      <input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="handleFileSelect(event)">
+      <input type="file" id="pdf-input" accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,.tiff" style="display:none" onchange="handleFileSelect(event)">
       <div id="upload-idle">
         <div class="upload-icon">📑</div>
         <div class="upload-label">Avis d'imposition ou déclaration 2042</div>
-        <div class="upload-sub">PDF natif depuis impots.gouv.fr · Max 15 Mo</div>
+        <div class="upload-sub">PDF · JPEG · PNG · scan · photo · Max 25 Mo</div>
         <div class="upload-btn-fake">Choisir un fichier</div>
       </div>
       <div id="upload-loading" style="display:none">
@@ -1406,8 +1406,9 @@ async function processPDF(file) {
 
     prefillFromExtracted(json.data, json.fields_found);
     setUploadState('success');
+    const methodLabel = json.method === 'vision' ? '🤖 OCR IA' : '📄 Extraction texte';
     document.getElementById('upload-success-label').textContent =
-      `${json.fields_count} catégorie${json.fields_count > 1 ? 's' : ''} extraite${json.fields_count > 1 ? 's' : ''} — formulaire pré-rempli`;
+      `${methodLabel} — ${json.fields_count} catégorie${json.fields_count > 1 ? 's' : ''} extraite${json.fields_count > 1 ? 's' : ''}`;
 
   } catch (err) {
     setUploadState('error');
