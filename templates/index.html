@@ -197,6 +197,95 @@
   .report-meta .report-date { font-size: 0.78rem; color: var(--text-muted); }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    border: 2.5px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    background: var(--bg);
+    user-select: none;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--primary-light);
+    background: #eff6ff;
+  }
+  .upload-zone.has-success {
+    border-color: var(--success);
+    background: var(--success-light);
+    cursor: default;
+  }
+  .upload-zone.has-error {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    cursor: pointer;
+  }
+  .upload-icon { font-size: 2.4rem; margin-bottom: 10px; }
+  .upload-label { font-size: 0.95rem; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+  .upload-sub { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 14px; }
+  .upload-btn-fake {
+    display: inline-block;
+    padding: 8px 20px;
+    background: var(--primary);
+    color: white;
+    border-radius: 30px;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  /* Spinner */
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary-light);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Extracted fields grid */
+  .extracted-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+  .extracted-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+  }
+  .extracted-item.found { border-color: #6ee7b7; background: var(--success-light); }
+  .extracted-item.missing { border-color: #fcd34d; background: var(--accent-light); }
+  .extracted-item .ei-icon { font-size: 1rem; flex-shrink: 0; }
+  .extracted-item .ei-text { flex: 1; }
+  .extracted-item .ei-label { font-size: 0.7rem; color: var(--text-muted); }
+  .extracted-item .ei-value { font-weight: 700; color: var(--primary); }
+
+  /* OR divider */
+  .or-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 24px 0 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+  }
+  .or-divider::before, .or-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .or-divider span { white-space: nowrap; padding: 0 4px; }
 </style>
 </head>
 <body>
@@ -224,6 +313,50 @@
 
 <!-- ========================= ÉTAPE 1 : PROFIL ========================= -->
 <div class="step-page active" id="step-1">
+
+  <!-- ZONE IMPORT PDF -->
+  <div class="card" id="upload-card">
+    <div class="card-title">📄 Importer votre avis d'imposition</div>
+    <div class="card-subtitle">Glissez votre PDF ou cliquez pour le sélectionner — les champs seront pré-remplis automatiquement.</div>
+
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('pdf-input').click()">
+      <input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="handleFileSelect(event)">
+      <div id="upload-idle">
+        <div class="upload-icon">📑</div>
+        <div class="upload-label">Avis d'imposition ou déclaration 2042</div>
+        <div class="upload-sub">PDF natif depuis impots.gouv.fr · Max 15 Mo</div>
+        <div class="upload-btn-fake">Choisir un fichier</div>
+      </div>
+      <div id="upload-loading" style="display:none">
+        <div class="spinner"></div>
+        <div class="upload-label">Analyse en cours…</div>
+        <div class="upload-sub">Extraction des données fiscales</div>
+      </div>
+      <div id="upload-success" style="display:none">
+        <div class="upload-icon">✅</div>
+        <div class="upload-label" id="upload-success-label">Données extraites</div>
+        <div class="upload-sub">Formulaire pré-rempli · Vérifiez et complétez si nécessaire</div>
+      </div>
+      <div id="upload-error" style="display:none">
+        <div class="upload-icon">⚠️</div>
+        <div class="upload-label">Extraction partielle</div>
+        <div class="upload-sub" id="upload-error-msg">Complétez manuellement les champs manquants</div>
+      </div>
+    </div>
+
+    <!-- Champs extraits -->
+    <div id="extracted-fields" style="display:none; margin-top:20px;">
+      <div class="section-title">Données extraites</div>
+      <div id="extracted-list" class="extracted-grid"></div>
+      <div class="info-box" style="margin-top:12px;">
+        <strong>Vérifiez les valeurs ci-dessous</strong> — certains PDF peuvent présenter des variations de mise en page. Complétez manuellement les champs non reconnus.
+      </div>
+    </div>
+
+    <div class="or-divider"><span>ou remplissez manuellement</span></div>
+  </div>
+
+  <!-- FORMULAIRE PROFIL -->
   <div class="card">
     <div class="card-title">Votre profil personnel</div>
     <div class="card-subtitle">Ces informations permettent de calculer précisément votre plafond de déduction et votre fiscalité.</div>
@@ -1215,6 +1348,165 @@ document.getElementById('parts').removeAttribute('readonly');
 updateParts();
 document.getElementById('res-date').querySelector('span').textContent =
   new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+
+// ============================================================
+// UPLOAD PDF — drag & drop + fetch
+// ============================================================
+const uploadZone = document.getElementById('upload-zone');
+
+uploadZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  uploadZone.classList.add('drag-over');
+});
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer?.files?.[0];
+  if (file) processPDF(file);
+});
+
+function handleFileSelect(event) {
+  const file = event.target.files?.[0];
+  if (file) processPDF(file);
+}
+
+function setUploadState(state) {
+  ['idle', 'loading', 'success', 'error'].forEach(s =>
+    document.getElementById('upload-' + s).style.display = 'none'
+  );
+  document.getElementById('upload-' + state).style.display = 'block';
+  uploadZone.className = 'upload-zone';
+  if (state === 'success') uploadZone.classList.add('has-success');
+  if (state === 'error')   uploadZone.classList.add('has-error');
+}
+
+async function processPDF(file) {
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    alert('Veuillez sélectionner un fichier PDF.');
+    return;
+  }
+
+  setUploadState('loading');
+  document.getElementById('extracted-fields').style.display = 'none';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/parse-pdf', { method: 'POST', body: formData });
+    const json = await res.json();
+
+    if (!res.ok || json.error) {
+      setUploadState('error');
+      document.getElementById('upload-error-msg').textContent =
+        json.error || 'Erreur lors de l\'analyse. Complétez manuellement.';
+      return;
+    }
+
+    prefillFromExtracted(json.data, json.fields_found);
+    setUploadState('success');
+    document.getElementById('upload-success-label').textContent =
+      `${json.fields_count} catégorie${json.fields_count > 1 ? 's' : ''} extraite${json.fields_count > 1 ? 's' : ''} — formulaire pré-rempli`;
+
+  } catch (err) {
+    setUploadState('error');
+    document.getElementById('upload-error-msg').textContent =
+      'Impossible de contacter le serveur. Vérifiez votre connexion.';
+  }
+}
+
+// ──────────────────────────────────────────────
+// Pré-remplissage du formulaire
+// ──────────────────────────────────────────────
+function prefillFromExtracted(data, fieldsFound) {
+  const items = [];
+
+  // Situation familiale
+  if (data.situation) {
+    const btn = document.querySelector(`#toggle-situation [data-val="${data.situation}"]`);
+    if (btn) { setSituation(btn); }
+    items.push({ label: 'Situation familiale', value: capitalize(data.situation), found: true });
+  } else {
+    items.push({ label: 'Situation familiale', value: 'À préciser', found: false });
+  }
+
+  // Nombre de parts
+  if (data.parts) {
+    document.getElementById('parts').value = data.parts;
+    items.push({ label: 'Nombre de parts', value: data.parts + ' part' + (data.parts > 1 ? 's' : ''), found: true });
+  } else {
+    items.push({ label: 'Nombre de parts', value: 'À préciser', found: false });
+  }
+
+  // Salaire déclarant 1
+  if (data.salaire_1) {
+    document.getElementById('salaire-brut').value = data.salaire_1;
+    items.push({ label: 'Salaires déclarant', value: fmtE(data.salaire_1), found: true });
+  } else {
+    items.push({ label: 'Salaires déclarant', value: 'Non trouvé', found: false });
+  }
+
+  // Salaire déclarant 2 (conjoint)
+  if (data.salaire_2) {
+    document.getElementById('salaire-conjoint').value = data.salaire_2;
+    items.push({ label: 'Salaires conjoint', value: fmtE(data.salaire_2), found: true });
+  }
+
+  // Bénéfices TNS
+  if (data.revenus_tns) {
+    document.getElementById('revenus-tns').value = data.revenus_tns;
+    items.push({ label: 'Bénéfices TNS', value: fmtE(data.revenus_tns), found: true });
+  }
+
+  // Revenu fiscal de référence (info only)
+  if (data.rfr) {
+    items.push({ label: 'Revenu fiscal de réf.', value: fmtE(data.rfr), found: true });
+  }
+
+  // IR net (info only)
+  if (data.ir_net !== undefined) {
+    items.push({ label: 'Impôt net 2024', value: fmtE(data.ir_net), found: true });
+  }
+
+  // Plafond annuel PER
+  if (data.plafond_annuel) {
+    items.push({ label: 'Plafond annuel PER', value: fmtE(data.plafond_annuel), found: true });
+  } else {
+    items.push({ label: 'Plafond annuel PER', value: 'Calculé automatiquement', found: false });
+  }
+
+  // Reports N-1, N-2, N-3
+  if (data.report_n1) {
+    document.getElementById('report-n1').value = data.report_n1;
+    items.push({ label: 'Report N-1 (2023)', value: fmtE(data.report_n1), found: true });
+  } else {
+    items.push({ label: 'Report N-1 (2023)', value: 'Non trouvé — à compléter', found: false });
+  }
+  if (data.report_n2) {
+    document.getElementById('report-n2').value = data.report_n2;
+    items.push({ label: 'Report N-2 (2022)', value: fmtE(data.report_n2), found: true });
+  } else {
+    items.push({ label: 'Report N-2 (2022)', value: 'Non trouvé — à compléter', found: false });
+  }
+  if (data.report_n3) {
+    document.getElementById('report-n3').value = data.report_n3;
+    items.push({ label: 'Report N-3 (2021)', value: fmtE(data.report_n3), found: true });
+  }
+
+  // Afficher la grille des champs extraits
+  const listDiv = document.getElementById('extracted-list');
+  listDiv.innerHTML = items.map(item => `
+    <div class="extracted-item ${item.found ? 'found' : 'missing'}">
+      <span class="ei-icon">${item.found ? '✅' : '✏️'}</span>
+      <div class="ei-text">
+        <div class="ei-label">${item.label}</div>
+        <div class="ei-value">${item.value}</div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('extracted-fields').style.display = 'block';
+}
 
 </script>
 </body>
