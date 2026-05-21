@@ -1504,7 +1504,9 @@ document.getElementById('res-date').querySelector('span').textContent =
 // ============================================================
 function handleFileSelect(event) {
   const file = event.target.files?.[0];
+  console.log('[upload] handleFileSelect déclenché, fichier:', file?.name, file?.size, file?.type);
   if (file) processPDF(file);
+  else console.warn('[upload] Aucun fichier dans event.target.files');
 }
 
 function setUploadState(state) {
@@ -1528,6 +1530,7 @@ const ALLOWED_EXT = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'];
 
 async function processPDF(file) {
   const ext = '.' + file.name.split('.').pop().toLowerCase();
+  console.log('[upload] processPDF — ext:', ext, 'type:', file.type);
   if (!ALLOWED_EXT.includes(ext) && !ALLOWED_TYPES.includes(file.type)) {
     alert('Format non supporté. Utilisez un PDF, JPEG, PNG, ou autre image.');
     return;
@@ -1535,13 +1538,16 @@ async function processPDF(file) {
 
   setUploadState('loading');
   document.getElementById('extracted-fields').style.display = 'none';
+  console.log('[upload] état loading affiché, envoi vers /parse-pdf…');
 
   const formData = new FormData();
   formData.append('file', file);
 
   try {
     const res = await fetch('/parse-pdf', { method: 'POST', body: formData });
+    console.log('[upload] réponse HTTP:', res.status);
     const json = await res.json();
+    console.log('[upload] JSON reçu:', json);
 
     if (!res.ok || json.error) {
       setUploadState('error');
@@ -1557,9 +1563,10 @@ async function processPDF(file) {
       `${methodLabel} — ${json.fields_count} catégorie${json.fields_count > 1 ? 's' : ''} extraite${json.fields_count > 1 ? 's' : ''}`;
 
   } catch (err) {
+    console.error('[upload] erreur catch:', err);
     setUploadState('error');
     document.getElementById('upload-error-msg').textContent =
-      'Impossible de contacter le serveur. Vérifiez votre connexion.';
+      'Erreur : ' + (err.message || 'Impossible de contacter le serveur.');
   }
 }
 
