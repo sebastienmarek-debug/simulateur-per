@@ -360,8 +360,15 @@
     <div class="card-title">📄 Importer votre avis d'imposition</div>
     <div class="card-subtitle">Glissez votre PDF ou cliquez pour le sélectionner — les champs seront pré-remplis automatiquement.</div>
 
-    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('pdf-input').click()">
-      <input type="file" id="pdf-input" accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,.tiff" style="display:none" onchange="handleFileSelect(event)">
+    <!-- L'input est hors du label pour éviter tout conflit d'événements -->
+    <input type="file" id="pdf-input"
+           accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,.tiff"
+           style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;"
+           onchange="handleFileSelect(event)">
+
+    <!-- label natif : cliquer n'importe où dessus ouvre le sélecteur de fichier,
+         sans JavaScript, compatible tous navigateurs -->
+    <label class="upload-zone" id="upload-zone" for="pdf-input">
       <div id="upload-idle">
         <div class="upload-icon">📑</div>
         <div class="upload-label">Avis d'imposition ou déclaration 2042</div>
@@ -383,7 +390,7 @@
         <div class="upload-label">Extraction partielle</div>
         <div class="upload-sub" id="upload-error-msg">Complétez manuellement les champs manquants</div>
       </div>
-    </div>
+    </label>
 
     <!-- Champs extraits -->
     <div id="extracted-fields" style="display:none; margin-top:20px;">
