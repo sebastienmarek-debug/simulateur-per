@@ -569,8 +569,9 @@
     <div class="form-grid">
       <div class="field">
         <label>Impôt net 2024 <span>(sur revenus 2023)</span></label>
-        <input type="number" id="ir-net" placeholder="ex : 3200" min="0">
-        <div class="hint">Montant sur votre avis d'imposition, ligne <b>« Impôt net »</b>. Saisir 0 si non imposable. Pré-rempli si vous avez uploadé votre avis.</div>
+        <input type="number" id="ir-net" placeholder="ex : 3200" min="0"
+               oninput="this.dataset.manual='true'; this.dataset.auto=''; updateIrNetHint();">
+        <div class="hint ir-net-hint">Montant ligne <b>« Impôt net »</b> de votre avis d'imposition. Sera estimé automatiquement si laissé vide — corrigez avec votre valeur réelle pour des scénarios précis.</div>
       </div>
     </div>
 
@@ -911,8 +912,49 @@ function goToStep(n) {
 
 function nextStep(current) {
   if (!validateStep(current)) return;
+  if (current === 2) autoFillIrNet(); // toujours recalculer avant de passer à l'étape suivante
   if (current === 4) { calculate(); return; }
   goToStep(current + 1);
+}
+
+// Remplit ir-net avec l'IR estimé depuis les revenus, sauf si l'utilisateur a déjà
+// saisi une valeur manuellement (champ marqué data-manual="true").
+function updateIrNetHint() {
+  const el = document.getElementById('ir-net');
+  const hint = el?.closest('.field')?.querySelector('.ir-net-hint');
+  if (!hint) return;
+  const v = parseFloat(el.value);
+  if (!isNaN(v) && v >= 0) {
+    hint.innerHTML = v === 0
+      ? `<b style="color:var(--success)">✓ Non imposable — aucun avantage fiscal immédiat</b>`
+      : `<b style="color:var(--success)">✓ Impôt confirmé : ${fmtE(v)} — les scénarios seront calibrés sur ce montant</b>`;
+  }
+}
+
+function autoFillIrNet() {
+  const irNetEl = document.getElementById('ir-net');
+  if (irNetEl.dataset.manual === 'true') return; // ne pas écraser la saisie manuelle
+
+  const parts = parseFloat(document.getElementById('parts')?.value) || 1;
+  let revImp = 0;
+  if (state.statut === 'tns' || state.statut === 'agriculteur') {
+    revImp = numVal('revenus-tns') + numVal('revenus-fonciers') + numVal('autres-revenus');
+  } else {
+    const sal = numVal('salaire-brut');
+    const fraisMode = document.getElementById('frais-mode')?.value;
+    const frais = fraisMode === 'reels' ? numVal('frais-reels') : Math.min(Math.max(sal * 0.10, 504), 13522);
+    const salConj = numVal('salaire-conjoint');
+    const fraisConj = Math.min(Math.max(salConj * 0.10, 504), 13522);
+    revImp = (sal - frais) + (salConj - fraisConj) + numVal('revenus-fonciers') + numVal('autres-revenus');
+  }
+
+  const estimated = Math.round(calculateIR(Math.max(0, revImp), parts));
+  if (estimated > 0) {
+    irNetEl.value = estimated;
+    irNetEl.dataset.auto = 'true';
+    const hint = irNetEl.closest('.field')?.querySelector('.ir-net-hint');
+    if (hint) hint.innerHTML = `<b style="color:var(--accent)">⚠ Estimation barème (${fmtE(estimated)}) — vérifiez sur votre avis d'imposition et corrigez si différent. Les crédits/réductions peuvent réduire ce montant.</b>`;
+  }
 }
 
 function prevStep(current) { goToStep(current - 1); }
@@ -1669,7 +1711,12 @@ function prefillFromExtracted(data, fieldsFound) {
 
   // IR net — pré-remplissage du champ + affichage
   if (data.ir_net !== undefined) {
-    document.getElementById('ir-net').value = data.ir_net;
+    const irNetEl = document.getElementById('ir-net');
+    irNetEl.value = data.ir_net;
+    irNetEl.dataset.manual = 'true'; // valeur officielle depuis avis — ne pas écraser
+    irNetEl.dataset.auto = '';
+    const hint = irNetEl.closest('.field')?.querySelector('.ir-net-hint');
+    if (hint) hint.innerHTML = `<b style="color:var(--success)">✓ Extrait de votre avis d'imposition — ${fmtE(data.ir_net)}</b>`;
     items.push({ label: 'Impôt net 2024', value: fmtE(data.ir_net), found: true });
   }
 
