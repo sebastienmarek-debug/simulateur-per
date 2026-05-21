@@ -1271,9 +1271,12 @@ function calculate() {
   const irBase = calculateIR(revenuImposable, nbParts);
 
   // IR réellement payé (depuis avis d'imposition ou saisi manuellement)
-  const irNetSaisi = numVal('ir-net');
-  // Si non saisi, on utilise irBase (notre calcul théorique)
-  const irNetReel = irNetSaisi > 0 ? irNetSaisi : irBase;
+  // On lit la valeur brute pour distinguer "champ vide" de "valeur nulle ou négative"
+  const irNetRaw = document.getElementById('ir-net')?.value?.trim();
+  const irNetFilled = irNetRaw !== '' && irNetRaw !== null && irNetRaw !== undefined;
+  // Si le champ est rempli (même négatif = crédit d'impôt > impôt → IR effectif = 0)
+  // Si le champ est vide → on utilise irBase (estimation barème)
+  const irNetReel = irNetFilled ? Math.max(0, parseFloat(irNetRaw) || 0) : irBase;
 
   // TMI à la retraite
   const revRetEstime = numVal('revenus-retraite') || 0;
