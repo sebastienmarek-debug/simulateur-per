@@ -564,6 +564,16 @@
       </div>
     </div>
 
+    <hr class="divider">
+    <div class="section-title">Impôt réellement payé <span style="font-weight:400;color:var(--text-muted)">(clé pour calibrer l'optimisation)</span></div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Impôt net 2024 <span>(sur revenus 2023)</span></label>
+        <input type="number" id="ir-net" placeholder="ex : 3200" min="0">
+        <div class="hint">Montant sur votre avis d'imposition, ligne <b>« Impôt net »</b>. Saisir 0 si non imposable. Pré-rempli si vous avez uploadé votre avis.</div>
+      </div>
+    </div>
+
     <div class="alert alert-error" id="alert-2"></div>
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="prevStep(2)">&larr; Retour</button>
@@ -1051,58 +1061,95 @@ function calcPlafondTNS(revenusPro) {
 // ============================================================
 // CALCUL DES SCÉNARIOS OPTIMAUX
 // ============================================================
-function calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, irBase) {
+// Calcule le versement minimal pour annuler entièrement irNetReel
+// (au-delà : chaque euro supplémentaire n'économise plus d'impôt)
+function calcVersementUtileMax(revenuImposable, nbParts, irBase, irNetReel) {
+  if (irNetReel <= 0) return 0;
+  if (irBase <= irNetReel) return revenuImposable; // modèle brut < impôt réel, pas de cap utile
+
+  // On cherche D tel que irBase - IR(RI-D) >= irNetReel
+  // i.e., IR(RI-D) <= irBase - irNetReel
+  const targetIR = irBase - irNetReel;
+  let lo = 0, hi = revenuImposable;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (calculateIR(Math.max(0, revenuImposable - mid), nbParts) <= targetIR) hi = mid;
+    else lo = mid;
+  }
+  return Math.ceil(hi / 100) * 100;
+}
+
+function calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, irBase, irNetReel) {
   const SEUILS = [180294, 83823, 29315, 11497, 0];
   const scenarios = [];
   const qi = revenuImposable / nbParts;
 
-  // ── A : Passage de tranche — rendement fiscal maximum par euro ──
-  if (tmi > 0.11 && plafondDisponible >= 500) {
-    const bracketFloor = SEUILS.find(s => qi > s) ?? 0;
-    const amountToFloor = Math.ceil((qi - bracketFloor) * nbParts) + 50;
-    const cappedA = Math.min(amountToFloor, plafondDisponible);
-    const irAfterA = calculateIR(Math.max(0, revenuImposable - cappedA), nbParts);
-    const savingsA = irBase - irAfterA;
-    const newTMI   = getTMI(Math.max(0, revenuImposable - cappedA - 1), nbParts);
+  // Versement au-delà duquel il n'y a plus d'économie fiscale immédiate
+  const versUtileMax = Math.min(plafondDisponible,
+    calcVersementUtileMax(revenuImposable, nbParts, irBase, irNetReel));
+
+  // L'économie réelle est plafonnée à l'impôt effectivement payé
+  function realSavings(amount) {
+    const theo = irBase - calculateIR(Math.max(0, revenuImposable - amount), nbParts);
+    return Math.min(irNetReel, Math.max(0, theo));
+  }
+
+  if (versUtileMax <= 0 || irNetReel <= 0) {
+    // Non imposable : aucun scénario fiscal pertinent
     scenarios.push({
-      id: 'tranche', label: 'Optimisation de tranche',
-      badge: '⭐ Recommandé', badgeClass: 'sc-badge-green',
-      amount: cappedA, savings: savingsA, recommended: true,
-      desc: `Fait passer votre TMI de ${(tmi*100).toFixed(0)}% → ${(newTMI*100).toFixed(0)}% : rendement fiscal maximal par euro investi.`,
+      id: 'nonimposable', label: 'Non imposable',
+      badge: 'ℹ️ Info', badgeClass: 'sc-badge-amber',
+      amount: 0, savings: 0, recommended: true,
+      desc: 'Vous ne payez pas (ou très peu) d\'impôt sur le revenu. Verser dans un PER ne génère pas d\'économie fiscale immédiate — l\'intérêt est la constitution d\'épargne long terme.',
+    });
+    return scenarios;
+  }
+
+  // ── A : Passage de tranche ───────────────────────────────────────
+  if (tmi > 0.11) {
+    const bracketFloor = SEUILS.find(s => qi > s) ?? 0;
+    const amountToFloor = Math.min(Math.ceil((qi - bracketFloor) * nbParts) + 50, versUtileMax);
+    if (amountToFloor >= 200) {
+      const savingsA = realSavings(amountToFloor);
+      const newTMI   = getTMI(Math.max(0, revenuImposable - amountToFloor - 1), nbParts);
+      scenarios.push({
+        id: 'tranche', label: 'Optimisation de tranche',
+        badge: '⭐ Meilleur rendement', badgeClass: 'sc-badge-green',
+        amount: amountToFloor, savings: savingsA, recommended: true,
+        desc: `Fait passer votre TMI de ${(tmi*100).toFixed(0)}% → ${(newTMI*100).toFixed(0)}% — rendement fiscal maximal par euro investi.`,
+      });
+    }
+  }
+
+  // ── B : Annulation totale de l'impôt ─────────────────────────────
+  // = versement utile max (au-delà : 0 économie supplémentaire)
+  const alreadySameB = scenarios.find(s => Math.abs(s.amount - versUtileMax) < 200);
+  if (!alreadySameB && versUtileMax >= 300) {
+    const savingsB = realSavings(versUtileMax);
+    const isFullCeiling = versUtileMax >= plafondDisponible - 100;
+    scenarios.push({
+      id: 'annulation', label: isFullCeiling ? 'Plafond maximal' : 'Impôt à zéro',
+      badge: isFullCeiling ? '📊 Plafond complet' : '🎯 Économie maximale',
+      badgeClass: 'sc-badge-blue',
+      amount: versUtileMax, savings: savingsB,
+      recommended: scenarios.length === 0,
+      desc: isFullCeiling
+        ? `Utilise la totalité de votre enveloppe disponible — économie d'impôt maximale.`
+        : `Réduit votre impôt à 0 € — investir davantage n'apporterait aucune économie fiscale supplémentaire cette année.`,
     });
   }
 
-  // ── B : Plafond complet — économie absolue maximale ──────────────
-  if (plafondDisponible >= 500) {
-    const irAfterB = calculateIR(Math.max(0, revenuImposable - plafondDisponible), nbParts);
-    const savingsB = irBase - irAfterB;
-    const alreadySame = scenarios.find(s => Math.abs(s.amount - plafondDisponible) < 200);
-    if (!alreadySame) {
-      scenarios.push({
-        id: 'max', label: 'Plafond maximal',
-        badge: tmi >= 0.30 ? '💎 Impact maximum' : '📊 Plafond complet',
-        badgeClass: tmi >= 0.30 ? 'sc-badge-blue' : 'sc-badge-amber',
-        amount: plafondDisponible, savings: savingsB,
-        recommended: tmi >= 0.30 && scenarios.length === 0,
-        desc: `Utilise la totalité de votre enveloppe disponible — économie d'impôt maximale en valeur absolue.`,
-      });
-    }
-  }
-
-  // ── C : Effort équilibré — moitié du plafond arrondie ───────────
-  if (plafondDisponible > 2000 && scenarios.length < 3) {
-    const amountC = Math.round(plafondDisponible / 2 / 500) * 500;
-    const irAfterC = calculateIR(Math.max(0, revenuImposable - amountC), nbParts);
-    const savingsC = irBase - irAfterC;
-    const alreadyCovered = scenarios.find(s => Math.abs(s.amount - amountC) < 500);
-    if (!alreadyCovered && amountC >= 500) {
-      scenarios.push({
-        id: 'equilibre', label: 'Effort équilibré',
-        badge: '🔸 Alternative', badgeClass: 'sc-badge-amber',
-        amount: amountC, savings: savingsC, recommended: false,
-        desc: `Environ la moitié du plafond disponible — bonne économie fiscale avec un effort d'épargne mesuré.`,
-      });
-    }
+  // ── C : Effort équilibré — moitié du versement utile ────────────
+  const amountC = Math.max(500, Math.round(versUtileMax / 2 / 500) * 500);
+  const alreadyCoveredC = scenarios.find(s => Math.abs(s.amount - amountC) < 400);
+  if (!alreadyCoveredC && amountC >= 500 && amountC < versUtileMax * 0.95) {
+    const savingsC = realSavings(amountC);
+    scenarios.push({
+      id: 'equilibre', label: 'Effort équilibré',
+      badge: '🔸 Alternative', badgeClass: 'sc-badge-amber',
+      amount: amountC, savings: savingsC, recommended: false,
+      desc: `Environ la moitié de l'effort optimal — bonne économie fiscale avec un investissement plus mesuré.`,
+    });
   }
 
   if (scenarios.length > 0 && !scenarios.find(s => s.recommended))
@@ -1181,6 +1228,11 @@ function calculate() {
   const tmi    = getTMI(revenuImposable, nbParts);
   const irBase = calculateIR(revenuImposable, nbParts);
 
+  // IR réellement payé (depuis avis d'imposition ou saisi manuellement)
+  const irNetSaisi = numVal('ir-net');
+  // Si non saisi, on utilise irBase (notre calcul théorique)
+  const irNetReel = irNetSaisi > 0 ? irNetSaisi : irBase;
+
   // TMI à la retraite
   const revRetEstime = numVal('revenus-retraite') || 0;
   const tmiRet = revRetEstime > 0
@@ -1188,7 +1240,7 @@ function calculate() {
     : getTMI(revenuImposable * 0.60, nbParts);
 
   // Scénarios optimaux
-  const scenarios = calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, irBase);
+  const scenarios = calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, irBase, irNetReel);
 
   // Stocker le contexte global
   _ctx = { prenom, age, nbParts, ageRet, annees, rendement, tmi, tmiRet, irBase,
@@ -1615,8 +1667,9 @@ function prefillFromExtracted(data, fieldsFound) {
     items.push({ label: 'Revenu fiscal de réf.', value: fmtE(data.rfr), found: true });
   }
 
-  // IR net (info only)
+  // IR net — pré-remplissage du champ + affichage
   if (data.ir_net !== undefined) {
+    document.getElementById('ir-net').value = data.ir_net;
     items.push({ label: 'Impôt net 2024', value: fmtE(data.ir_net), found: true });
   }
 
