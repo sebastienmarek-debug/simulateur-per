@@ -358,46 +358,49 @@
   <!-- ZONE IMPORT PDF -->
   <div class="card" id="upload-card">
     <div class="card-title">📄 Importer votre avis d'imposition</div>
-    <div class="card-subtitle">Glissez votre PDF ou cliquez pour le sélectionner — les champs seront pré-remplis automatiquement.</div>
+    <div class="card-subtitle">Sélectionnez votre document — les champs seront pré-remplis automatiquement.</div>
 
-    <label class="upload-zone" id="upload-zone" style="display:block; cursor:pointer;">
+    <!-- Input visible stylisé — le plus fiable, aucun JS nécessaire pour l'ouvrir -->
+    <div id="upload-idle" style="text-align:center; padding:28px 0 20px;">
+      <div style="font-size:2.4rem; margin-bottom:12px;">📑</div>
+      <div style="font-size:0.88rem; color:var(--text-muted); margin-bottom:16px;">
+        PDF · JPEG · PNG · scan · photo · Max 25 Mo
+      </div>
       <input type="file" id="pdf-input"
              accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,.tiff"
-             style="display:none"
-             onchange="handleFileSelect(event)">
-      <div id="upload-idle">
-        <div class="upload-icon">📑</div>
-        <div class="upload-label">Avis d'imposition ou déclaration 2042</div>
-        <div class="upload-sub">PDF · JPEG · PNG · scan · photo · Max 25 Mo</div>
-        <div class="upload-btn-fake">Choisir un fichier</div>
-      </div>
-      <div id="upload-loading" style="display:none">
-        <div class="spinner"></div>
-        <div class="upload-label">Analyse en cours…</div>
-        <div class="upload-sub">Extraction des données fiscales</div>
-      </div>
-      <div id="upload-success" style="display:none">
-        <div class="upload-icon">✅</div>
-        <div class="upload-label" id="upload-success-label">Données extraites</div>
-        <div class="upload-sub">Formulaire pré-rempli · Vérifiez et complétez si nécessaire</div>
-      </div>
-      <div id="upload-error" style="display:none">
-        <div class="upload-icon">⚠️</div>
-        <div class="upload-label">Extraction partielle</div>
-        <div class="upload-sub" id="upload-error-msg">Complétez manuellement les champs manquants</div>
-      </div>
-    </label>
+             onchange="handleFileSelect(event)"
+             style="font-size:0.88rem; color:var(--primary); cursor:pointer; max-width:340px; width:100%;">
+    </div>
+
+    <div id="upload-loading" style="display:none; text-align:center; padding:24px 0;">
+      <div class="spinner" style="margin:0 auto 12px;"></div>
+      <div style="font-weight:700; color:var(--primary);">Analyse en cours…</div>
+      <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">Extraction des données fiscales</div>
+    </div>
+
+    <div id="upload-success" style="display:none; text-align:center; padding:20px 0;">
+      <div style="font-size:2rem; margin-bottom:8px;">✅</div>
+      <div id="upload-success-label" style="font-weight:700; color:var(--success); font-size:1rem;">Données extraites</div>
+      <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">Formulaire pré-rempli · Vérifiez et complétez si nécessaire</div>
+    </div>
+
+    <div id="upload-error" style="display:none; text-align:center; padding:20px 0;">
+      <div style="font-size:2rem; margin-bottom:8px;">⚠️</div>
+      <div style="font-weight:700; color:var(--accent); font-size:1rem;">Extraction partielle ou échec</div>
+      <div id="upload-error-msg" style="font-size:0.8rem; color:var(--text-muted); margin-top:6px; max-width:500px; margin-inline:auto;"></div>
+      <button onclick="resetUpload()" style="margin-top:12px; padding:6px 16px; border:1.5px solid var(--border); border-radius:20px; background:white; cursor:pointer; font-size:0.8rem;">Réessayer</button>
+    </div>
 
     <!-- Champs extraits -->
-    <div id="extracted-fields" style="display:none; margin-top:20px;">
+    <div id="extracted-fields" style="display:none; margin-top:16px;">
       <div class="section-title">Données extraites</div>
       <div id="extracted-list" class="extracted-grid"></div>
       <div class="info-box" style="margin-top:12px;">
-        <strong>Vérifiez les valeurs ci-dessous</strong> — certains PDF peuvent présenter des variations de mise en page. Complétez manuellement les champs non reconnus.
+        <strong>Vérifiez les valeurs ci-dessous</strong> et complétez manuellement les champs non reconnus (✏️).
       </div>
     </div>
 
-    <div class="or-divider"><span>ou remplissez manuellement</span></div>
+    <div class="or-divider"><span>ou remplissez manuellement ci-dessous</span></div>
   </div>
 
   <!-- FORMULAIRE PROFIL -->
@@ -837,40 +840,14 @@
 
 <script>
 // ============================================================
-// DRAG & DROP GLOBAL — doit être en PREMIER, avant tout le reste
-// capture:true + passive:false garantissent que preventDefault() fonctionne
-// même si une erreur JS survient plus bas dans le script.
+// DRAG & DROP — prévention du comportement navigateur par défaut
 // ============================================================
-;(function() {
-  function stopDrag(e) { e.preventDefault(); e.stopPropagation(); }
-
-  window.addEventListener('dragenter', stopDrag, { capture: true, passive: false });
-  window.addEventListener('dragover',  stopDrag, { capture: true, passive: false });
-  window.addEventListener('dragleave', stopDrag, { capture: true, passive: false });
-
-  window.addEventListener('drop', function(e) {
-    e.preventDefault();
-    const file = e.dataTransfer?.files?.[0];
-    if (!file) return;
-    const overlay = document.getElementById('drop-overlay');
-    if (overlay) overlay.style.display = 'none';
-    if (typeof processPDF === 'function') processPDF(file);
-  }, { capture: true, passive: false });
-
-  // Overlay pleine page pendant le glissement
-  window.addEventListener('dragenter', function() {
-    const overlay = document.getElementById('drop-overlay');
-    if (overlay) overlay.style.display = 'flex';
-  }, { capture: true });
-
-  window.addEventListener('dragleave', function(e) {
-    // Masquer seulement si on quitte la fenêtre entière
-    if (e.clientX === 0 && e.clientY === 0) {
-      const overlay = document.getElementById('drop-overlay');
-      if (overlay) overlay.style.display = 'none';
-    }
-  }, { capture: true });
-})();
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer?.files?.[0];
+  if (file && typeof processPDF === 'function') processPDF(file);
+});
 
 // ============================================================
 // CONSTANTES FISCALES
@@ -1523,28 +1500,36 @@ document.getElementById('res-date').querySelector('span').textContent =
   new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
 
 // ============================================================
-// UPLOAD PDF — clic sur la zone (le drag & drop est géré globalement en haut)
+// UPLOAD — drag & drop géré globalement en haut du script
 // ============================================================
-const uploadZone = document.getElementById('upload-zone');
-
 function handleFileSelect(event) {
   const file = event.target.files?.[0];
   if (file) processPDF(file);
 }
 
 function setUploadState(state) {
-  ['idle', 'loading', 'success', 'error'].forEach(s =>
-    document.getElementById('upload-' + s).style.display = 'none'
-  );
-  document.getElementById('upload-' + state).style.display = 'block';
-  uploadZone.className = 'upload-zone';
-  if (state === 'success') uploadZone.classList.add('has-success');
-  if (state === 'error')   uploadZone.classList.add('has-error');
+  ['idle', 'loading', 'success', 'error'].forEach(s => {
+    const el = document.getElementById('upload-' + s);
+    if (el) el.style.display = 'none';
+  });
+  const target = document.getElementById('upload-' + state);
+  if (target) target.style.display = 'block';
 }
 
+function resetUpload() {
+  setUploadState('idle');
+  document.getElementById('extracted-fields').style.display = 'none';
+  const inp = document.getElementById('pdf-input');
+  if (inp) inp.value = '';
+}
+
+const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff'];
+const ALLOWED_EXT = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'];
+
 async function processPDF(file) {
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    alert('Veuillez sélectionner un fichier PDF.');
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  if (!ALLOWED_EXT.includes(ext) && !ALLOWED_TYPES.includes(file.type)) {
+    alert('Format non supporté. Utilisez un PDF, JPEG, PNG, ou autre image.');
     return;
   }
 
