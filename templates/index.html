@@ -360,15 +360,11 @@
     <div class="card-title">📄 Importer votre avis d'imposition</div>
     <div class="card-subtitle">Glissez votre PDF ou cliquez pour le sélectionner — les champs seront pré-remplis automatiquement.</div>
 
-    <!-- L'input est hors du label pour éviter tout conflit d'événements -->
-    <input type="file" id="pdf-input"
-           accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,.tiff"
-           style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;"
-           onchange="handleFileSelect(event)">
-
-    <!-- label natif : cliquer n'importe où dessus ouvre le sélecteur de fichier,
-         sans JavaScript, compatible tous navigateurs -->
-    <label class="upload-zone" id="upload-zone" for="pdf-input">
+    <label class="upload-zone" id="upload-zone" style="display:block; cursor:pointer;">
+      <input type="file" id="pdf-input"
+             accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,.tiff"
+             style="display:none"
+             onchange="handleFileSelect(event)">
       <div id="upload-idle">
         <div class="upload-icon">📑</div>
         <div class="upload-label">Avis d'imposition ou déclaration 2042</div>
@@ -854,15 +850,11 @@
 
   window.addEventListener('drop', function(e) {
     e.preventDefault();
-    e.stopPropagation();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-    // Si l'overlay est visible, on ferme et on traite
     const overlay = document.getElementById('drop-overlay');
     if (overlay) overlay.style.display = 'none';
-    if (typeof processPDF === 'function') {
-      processPDF(file);
-    }
+    if (typeof processPDF === 'function') processPDF(file);
   }, { capture: true, passive: false });
 
   // Overlay pleine page pendant le glissement
