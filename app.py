@@ -305,47 +305,62 @@ def pdf_to_images(pdf_bytes, dpi=180, max_pages=3):
 def parse_document(file_bytes, filename):
     """
     Essaie dans l'ordre :
-    1. pdfplumber (texte natif, instantané)
-    2. Claude Vision sur les pages converties (scan PDF)
-    3. Claude Vision directement (image JPEG/PNG)
+    1. pdfplumber sur PDF natif (texte sélectionnable)
+    2. Claude Vision sur PDF converti en images (scan PDF)
+    3. Claude Vision directement sur image brute (JPEG/PNG)
+    Si pdfplumber extrait du texte lisible, on retourne toujours ce résultat
+    (même partiel) plutôt que de planter sur poppler manquant.
     """
     ext = os.path.splitext(filename.lower())[1]
     is_pdf = ext == '.pdf'
     is_image = ext in ('.jpg', '.jpeg', '.png', '.webp', '.heic', '.bmp', '.tiff', '.tif')
 
+    text_data = None  # résultat pdfplumber de secours
+
     # ── Étape 1 : PDF avec texte natif ──────────────────────────────
     if is_pdf and PDFPLUMBER_OK:
         text = extract_text_pdfplumber(file_bytes)
-        if text_has_content(text, min_chars=300):
+        if text_has_content(text, min_chars=200):
             data = parse_with_regex(text)
             if len(data.get('_fields_found', [])) >= 3:
                 data['_method'] = 'text'
                 return data
-            # Texte trouvé mais peu de champs → complète avec Vision
+            # Texte trouvé mais peu de champs : garde en fallback, essaie Vision
+            text_data = data
 
-    # ── Étape 2 : Vision Claude (PDF converti en images ou image brute) ──
+    # ── Étape 2 : Vision Claude ──────────────────────────────────────
     if not ANTHROPIC_OK:
-        raise ValueError("Module anthropic non disponible et PDF non lisible en texte.")
+        if text_data is not None:
+            text_data['_method'] = 'text'
+            return text_data
+        raise ValueError("Module anthropic non disponible. Déposez une image JPEG/PNG.")
 
-    if is_pdf:
-        if not PDF2IMAGE_OK:
+    try:
+        if is_pdf:
+            if not PDF2IMAGE_OK:
+                raise RuntimeError("pdf2image non disponible")
+            pil_images = pdf_to_images(file_bytes, dpi=180, max_pages=3)
+            images_b64 = [image_to_b64(img) for img in pil_images]
+        elif is_image:
+            img = Image.open(io.BytesIO(file_bytes))
+            images_b64 = [image_to_b64(img)]
+        else:
+            raise ValueError(f"Format non supporté : {ext}. Utilisez PDF, JPEG ou PNG.")
+
+        data = extract_with_claude_vision(images_b64)
+        data['_method'] = 'vision'
+        return data
+
+    except Exception as vision_err:
+        # Si Vision échoue (poppler absent, API down…) mais qu'on a du texte, on retourne ça
+        if text_data is not None:
+            text_data['_method'] = 'text'
+            return text_data
+        if is_pdf:
             raise ValueError(
-                "Le PDF semble scanné mais pdf2image n'est pas installé. "
-                "Déposez une image JPEG/PNG à la place."
+                f"Impossible d'analyser ce PDF (essayez une capture d'écran JPEG) : {vision_err}"
             )
-        pil_images = pdf_to_images(file_bytes, dpi=180, max_pages=3)
-        images_b64 = [image_to_b64(img) for img in pil_images]
-
-    elif is_image:
-        img = Image.open(io.BytesIO(file_bytes))
-        images_b64 = [image_to_b64(img)]
-
-    else:
-        raise ValueError(f"Format non supporté : {ext}. Utilisez PDF, JPEG ou PNG.")
-
-    data = extract_with_claude_vision(images_b64)
-    data['_method'] = 'vision'
-    return data
+        raise
 
 
 # ─────────────────────────────────────────────
