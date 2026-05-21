@@ -823,7 +823,56 @@
 
 </div><!-- /main -->
 
+<!-- OVERLAY pleine page affiché pendant le glissement -->
+<div id="drop-overlay" style="display:none; position:fixed; inset:0; z-index:9999;
+  background:rgba(30,58,95,0.82); align-items:center; justify-content:center;
+  flex-direction:column; gap:16px; pointer-events:none;">
+  <div style="font-size:4rem;">📄</div>
+  <div style="color:white; font-size:1.4rem; font-weight:800;">Déposez votre document ici</div>
+  <div style="color:rgba(255,255,255,0.7); font-size:0.9rem;">PDF · JPEG · PNG · scan · photo</div>
+</div>
+
 <script>
+// ============================================================
+// DRAG & DROP GLOBAL — doit être en PREMIER, avant tout le reste
+// capture:true + passive:false garantissent que preventDefault() fonctionne
+// même si une erreur JS survient plus bas dans le script.
+// ============================================================
+;(function() {
+  function stopDrag(e) { e.preventDefault(); e.stopPropagation(); }
+
+  window.addEventListener('dragenter', stopDrag, { capture: true, passive: false });
+  window.addEventListener('dragover',  stopDrag, { capture: true, passive: false });
+  window.addEventListener('dragleave', stopDrag, { capture: true, passive: false });
+
+  window.addEventListener('drop', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    // Si l'overlay est visible, on ferme et on traite
+    const overlay = document.getElementById('drop-overlay');
+    if (overlay) overlay.style.display = 'none';
+    if (typeof processPDF === 'function') {
+      processPDF(file);
+    }
+  }, { capture: true, passive: false });
+
+  // Overlay pleine page pendant le glissement
+  window.addEventListener('dragenter', function() {
+    const overlay = document.getElementById('drop-overlay');
+    if (overlay) overlay.style.display = 'flex';
+  }, { capture: true });
+
+  window.addEventListener('dragleave', function(e) {
+    // Masquer seulement si on quitte la fenêtre entière
+    if (e.clientX === 0 && e.clientY === 0) {
+      const overlay = document.getElementById('drop-overlay');
+      if (overlay) overlay.style.display = 'none';
+    }
+  }, { capture: true });
+})();
+
 // ============================================================
 // CONSTANTES FISCALES
 // ============================================================
@@ -1475,35 +1524,9 @@ document.getElementById('res-date').querySelector('span').textContent =
   new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
 
 // ============================================================
-// UPLOAD PDF — drag & drop + fetch
+// UPLOAD PDF — clic sur la zone (le drag & drop est géré globalement en haut)
 // ============================================================
-
-// Bloquer le comportement par défaut du navigateur (ouvrir/télécharger le fichier)
-// sur TOUTE la page, pas seulement sur la zone de dépôt.
-document.addEventListener('dragover',  e => e.preventDefault());
-document.addEventListener('dragleave', e => e.preventDefault());
-document.addEventListener('drop',      e => {
-  e.preventDefault();
-  // Si le fichier est déposé n'importe où sur la page, on le traite quand même
-  const file = e.dataTransfer?.files?.[0];
-  if (file) processPDF(file);
-});
-
 const uploadZone = document.getElementById('upload-zone');
-
-// Effet visuel uniquement sur la zone dédiée
-uploadZone.addEventListener('dragenter', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-uploadZone.addEventListener('dragleave', e => {
-  // Ne retirer la classe que si on quitte vraiment la zone (pas un enfant)
-  if (!uploadZone.contains(e.relatedTarget)) uploadZone.classList.remove('drag-over');
-});
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault();
-  uploadZone.classList.remove('drag-over');
-  const file = e.dataTransfer?.files?.[0];
-  if (file) processPDF(file);
-});
 
 function handleFileSelect(event) {
   const file = event.target.files?.[0];
