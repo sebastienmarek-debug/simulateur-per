@@ -1752,18 +1752,23 @@ function prefillFromExtracted(data, fieldsFound) {
     items.push({ label: 'Impôt net 2024', value: fmtE(data.ir_net), found: true });
   }
 
-  // ── Plafond PER ───────────────────────────────────────────────────
+  // ── Plafond PER — reports séparés par déclarant ──────────────────
   if (data.plafond_annuel) {
-    // Pré-remplir les reports avec les données par déclarant
-    const reportN1 = (data.report_n1_d1 || 0) + (data.report_n1_d2 || 0);
-    const reportN2 = (data.report_n2_d1 || 0) + (data.report_n2_d2 || 0);
-    const reportN3 = (data.report_n3_d1 || 0) + (data.report_n3_d2 || 0);
-    if (reportN1) document.getElementById('report-n1').value = reportN1;
-    if (reportN2) document.getElementById('report-n2').value = reportN2;
-    if (reportN3) document.getElementById('report-n3').value = reportN3;
-    items.push({ label: 'Plafond PER disponible', value: fmtE(data.plafond_annuel), found: true });
-    if (reportN1) items.push({ label: '  dont report N-1', value: fmtE(reportN1), found: true });
-    if (reportN2) items.push({ label: '  dont report N-2', value: fmtE(reportN2), found: true });
+    // Déclarant 1 → champs report-n1/n2/n3
+    if (data.report_n1_d1) { document.getElementById('report-n1').value = data.report_n1_d1; }
+    if (data.report_n2_d1) { document.getElementById('report-n2').value = data.report_n2_d1; }
+    if (data.report_n3_d1) { document.getElementById('report-n3').value = data.report_n3_d1; }
+
+    // Déclarant 2 (conjoint) → champs report-conj-n1/n2/n3
+    if (data.report_n1_d2) { document.getElementById('report-conj-n1').value = data.report_n1_d2; }
+    if (data.report_n2_d2) { document.getElementById('report-conj-n2').value = data.report_n2_d2; }
+    if (data.report_n3_d2) { document.getElementById('report-conj-n3').value = data.report_n3_d2; }
+
+    items.push({ label: 'Plafond PER total', value: fmtE(data.plafond_annuel), found: true });
+    if (data.plafond_d1 !== undefined) items.push({ label: '  Déclarant 1', value: fmtE(data.plafond_d1 || 0), found: true });
+    if (data.plafond_d2 !== undefined) items.push({ label: '  Déclarant 2 (conjoint)', value: fmtE(data.plafond_d2 || 0), found: true });
+    if (data.report_n1_d2) items.push({ label: '  Report N-1 conjoint', value: fmtE(data.report_n1_d2), found: true });
+    if (data.report_n2_d2) items.push({ label: '  Report N-2 conjoint', value: fmtE(data.report_n2_d2), found: true });
   } else {
     items.push({ label: 'Plafond PER', value: 'Calculé automatiquement', found: false });
   }
