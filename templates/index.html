@@ -1670,7 +1670,18 @@ async function processPDF(file) {
 function prefillFromExtracted(data, fieldsFound) {
   const items = [];
 
-  // Situation familiale
+  // ── Nom du déclarant 1 → champ prénom ────────────────────────────
+  if (data.nom_declarant1) {
+    const prenom = data.nom_declarant1.split(' ')[0]; // prend le premier mot
+    const prenomEl = document.getElementById('prenom');
+    if (prenomEl && !prenomEl.value) prenomEl.value = prenom;
+    items.push({ label: 'Nom déclarant 1', value: data.nom_declarant1, found: true });
+  }
+  if (data.nom_declarant2) {
+    items.push({ label: 'Nom déclarant 2', value: data.nom_declarant2, found: true });
+  }
+
+  // ── Situation familiale ────────────────────────────────────────────
   if (data.situation) {
     const btn = document.querySelector(`#toggle-situation [data-val="${data.situation}"]`);
     if (btn) { setSituation(btn); }
@@ -1679,7 +1690,15 @@ function prefillFromExtracted(data, fieldsFound) {
     items.push({ label: 'Situation familiale', value: 'À préciser', found: false });
   }
 
-  // Nombre de parts
+  // ── Statut professionnel (TNS détecté) ────────────────────────────
+  if (data.statut_hint) {
+    const btn = document.querySelector(`#toggle-statut [data-val="${data.statut_hint}"]`);
+    if (btn) { setStatut(btn); }
+    const label = data.statut_hint === 'tns' ? 'TNS / Gérant' : data.statut_hint;
+    items.push({ label: 'Statut professionnel', value: label + ' (détecté)', found: true });
+  }
+
+  // ── Nombre de parts ────────────────────────────────────────────────
   if (data.parts) {
     document.getElementById('parts').value = data.parts;
     items.push({ label: 'Nombre de parts', value: data.parts + ' part' + (data.parts > 1 ? 's' : ''), found: true });
@@ -1687,65 +1706,66 @@ function prefillFromExtracted(data, fieldsFound) {
     items.push({ label: 'Nombre de parts', value: 'À préciser', found: false });
   }
 
-  // Salaire déclarant 1
-  if (data.salaire_1) {
-    document.getElementById('salaire-brut').value = data.salaire_1;
-    items.push({ label: 'Salaires déclarant', value: fmtE(data.salaire_1), found: true });
-  } else {
-    items.push({ label: 'Salaires déclarant', value: 'Non trouvé', found: false });
-  }
-
-  // Salaire déclarant 2 (conjoint)
-  if (data.salaire_2) {
-    document.getElementById('salaire-conjoint').value = data.salaire_2;
-    items.push({ label: 'Salaires conjoint', value: fmtE(data.salaire_2), found: true });
-  }
-
-  // Bénéfices TNS
+  // ── Revenus TNS (gérant + BNC + BIC + BA cumulés) ─────────────────
   if (data.revenus_tns) {
     document.getElementById('revenus-tns').value = data.revenus_tns;
-    items.push({ label: 'Bénéfices TNS', value: fmtE(data.revenus_tns), found: true });
+    const detail = [
+      data.revenus_gerant && `gérant ${fmtE(data.revenus_gerant)}`,
+      data.revenus_bnc    && `BNC ${fmtE(data.revenus_bnc)}`,
+      data.revenus_bic    && `BIC ${fmtE(data.revenus_bic)}`,
+      data.revenus_ba     && `BA ${fmtE(data.revenus_ba)}`,
+    ].filter(Boolean).join(' + ');
+    items.push({ label: 'Revenus TNS', value: fmtE(data.revenus_tns) + (detail ? ` (${detail})` : ''), found: true });
+  } else {
+    // Salaire salarié si pas TNS
+    if (data.salaire_1) {
+      document.getElementById('salaire-brut').value = data.salaire_1;
+      items.push({ label: 'Salaires déclarant', value: fmtE(data.salaire_1), found: true });
+    } else {
+      items.push({ label: 'Salaires déclarant', value: 'Non trouvé', found: false });
+    }
+    if (data.salaire_2) {
+      document.getElementById('salaire-conjoint').value = data.salaire_2;
+      items.push({ label: 'Salaires conjoint', value: fmtE(data.salaire_2), found: true });
+    }
   }
 
-  // Revenu fiscal de référence (info only)
+  // ── Revenus fonciers ───────────────────────────────────────────────
+  if (data.revenus_fonciers !== undefined && data.revenus_fonciers > 0) {
+    document.getElementById('revenus-fonciers').value = data.revenus_fonciers;
+    items.push({ label: 'Revenus fonciers', value: fmtE(data.revenus_fonciers), found: true });
+  }
+
+  // ── TMI déclaré sur l'avis ────────────────────────────────────────
+  if (data.tmi_declare) {
+    items.push({ label: 'TMI sur avis fiscal', value: data.tmi_declare.toFixed(0) + '%', found: true });
+  }
+
+  // ── Revenu fiscal de référence ────────────────────────────────────
   if (data.rfr) {
     items.push({ label: 'Revenu fiscal de réf.', value: fmtE(data.rfr), found: true });
   }
 
-  // IR net — pré-remplissage du champ + affichage
+  // ── IR net — pré-remplissage ──────────────────────────────────────
   if (data.ir_net !== undefined) {
-    const irNetEl = document.getElementById('ir-net');
-    irNetEl.value = data.ir_net;
-    irNetEl.dataset.manual = 'true'; // valeur officielle depuis avis — ne pas écraser
-    irNetEl.dataset.auto = '';
-    const hint = irNetEl.closest('.field')?.querySelector('.ir-net-hint');
-    if (hint) hint.innerHTML = `<b style="color:var(--success)">✓ Extrait de votre avis d'imposition — ${fmtE(data.ir_net)}</b>`;
+    document.getElementById('ir-net').value = data.ir_net;
     items.push({ label: 'Impôt net 2024', value: fmtE(data.ir_net), found: true });
   }
 
-  // Plafond annuel PER
+  // ── Plafond PER ───────────────────────────────────────────────────
   if (data.plafond_annuel) {
-    items.push({ label: 'Plafond annuel PER', value: fmtE(data.plafond_annuel), found: true });
+    // Pré-remplir les reports avec les données par déclarant
+    const reportN1 = (data.report_n1_d1 || 0) + (data.report_n1_d2 || 0);
+    const reportN2 = (data.report_n2_d1 || 0) + (data.report_n2_d2 || 0);
+    const reportN3 = (data.report_n3_d1 || 0) + (data.report_n3_d2 || 0);
+    if (reportN1) document.getElementById('report-n1').value = reportN1;
+    if (reportN2) document.getElementById('report-n2').value = reportN2;
+    if (reportN3) document.getElementById('report-n3').value = reportN3;
+    items.push({ label: 'Plafond PER disponible', value: fmtE(data.plafond_annuel), found: true });
+    if (reportN1) items.push({ label: '  dont report N-1', value: fmtE(reportN1), found: true });
+    if (reportN2) items.push({ label: '  dont report N-2', value: fmtE(reportN2), found: true });
   } else {
-    items.push({ label: 'Plafond annuel PER', value: 'Calculé automatiquement', found: false });
-  }
-
-  // Reports N-1, N-2, N-3
-  if (data.report_n1) {
-    document.getElementById('report-n1').value = data.report_n1;
-    items.push({ label: 'Report N-1 (2023)', value: fmtE(data.report_n1), found: true });
-  } else {
-    items.push({ label: 'Report N-1 (2023)', value: 'Non trouvé — à compléter', found: false });
-  }
-  if (data.report_n2) {
-    document.getElementById('report-n2').value = data.report_n2;
-    items.push({ label: 'Report N-2 (2022)', value: fmtE(data.report_n2), found: true });
-  } else {
-    items.push({ label: 'Report N-2 (2022)', value: 'Non trouvé — à compléter', found: false });
-  }
-  if (data.report_n3) {
-    document.getElementById('report-n3').value = data.report_n3;
-    items.push({ label: 'Report N-3 (2021)', value: fmtE(data.report_n3), found: true });
+    items.push({ label: 'Plafond PER', value: 'Calculé automatiquement', found: false });
   }
 
   // Afficher la grille des champs extraits
