@@ -809,22 +809,28 @@
     <div class="card" style="margin-bottom:20px;">
       <div class="card-title">🎯 Simulateur personnalisé</div>
       <div class="card-subtitle">Entrez le montant que votre client souhaite verser — l'économie fiscale et l'impôt restant se calculent en temps réel.</div>
-      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:20px;">
-        <div style="flex:1; min-width:200px;">
-          <label style="font-size:0.82rem; font-weight:600; color:var(--primary); display:block; margin-bottom:6px;">Montant versé sur le PER</label>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <input type="number" id="sim-montant" min="0" placeholder="ex : 5000"
-              oninput="updateSimulateur()"
-              style="border:2px solid var(--primary-light); border-radius:var(--radius-sm); padding:10px 14px; font-size:1.1rem; font-weight:700; color:var(--primary); width:180px; outline:none;">
-            <span style="color:var(--text-muted); font-size:0.9rem;">€</span>
-          </div>
-          <input type="range" id="sim-slider" min="0" max="50000" step="100" value="0"
-            oninput="document.getElementById('sim-montant').value=this.value; updateSimulateur()"
-            style="width:100%; margin-top:10px; accent-color:var(--primary);">
-          <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-muted);">
-            <span>0 €</span>
-            <span id="sim-slider-max">—</span>
-          </div>
+
+      <!-- Baseline IR -->
+      <div id="sim-baseline" style="display:flex; align-items:center; gap:12px; background:var(--bg); border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:0.85rem;">
+        <span style="font-size:1.2rem;">🧾</span>
+        <span>Impôt de référence : <strong id="sim-ir-base-label" style="color:var(--primary);">—</strong></span>
+        <span id="sim-ir-base-warning" style="color:var(--accent); font-weight:600; display:none;">⚠️ Renseignez votre impôt net réel (étape 2) pour un calcul précis</span>
+      </div>
+
+      <div style="flex:1; min-width:200px; margin-bottom:20px;">
+        <label style="font-size:0.82rem; font-weight:600; color:var(--primary); display:block; margin-bottom:6px;">Montant versé sur le PER</label>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <input type="number" id="sim-montant" min="0" placeholder="ex : 5000"
+            oninput="updateSimulateur()"
+            style="border:2px solid var(--primary-light); border-radius:var(--radius-sm); padding:10px 14px; font-size:1.1rem; font-weight:700; color:var(--primary); width:180px; outline:none;">
+          <span style="color:var(--text-muted); font-size:0.9rem;">€</span>
+        </div>
+        <input type="range" id="sim-slider" min="0" max="50000" step="100" value="0"
+          oninput="document.getElementById('sim-montant').value=this.value; updateSimulateur()"
+          style="width:100%; margin-top:10px; accent-color:var(--primary);">
+        <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-muted);">
+          <span>0 €</span>
+          <span id="sim-slider-max">—</span>
         </div>
       </div>
       <div class="results-grid" style="grid-template-columns:1fr 1fr 1fr; margin-bottom:0;">
@@ -1482,9 +1488,15 @@ function selectScenario(id) {
 // SIMULATEUR MONTANT PERSONNALISÉ
 // ============================================================
 function updateSimulateur() {
-  if (!_ctx.irNetReel) return;
+  if (!_ctx || !_ctx.irBase) return;
   const montant = Math.max(0, parseFloat(document.getElementById('sim-montant').value) || 0);
   const plafond = _ctx.plafondDisponible;
+  const irRef   = _ctx.irNetReel;   // = valeur saisie dans "impôt net", ou irBase si absent
+  const irEstime = (_ctx.irNetReel === _ctx.irBase); // true si le champ ir-net n'était pas rempli
+
+  // Afficher la baseline et l'avertissement éventuel
+  document.getElementById('sim-ir-base-label').textContent = fmtE(irRef);
+  document.getElementById('sim-ir-base-warning').style.display = irEstime ? 'inline' : 'none';
 
   // Synchroniser slider et max
   const sliderMax = Math.max(plafond, montant, 50000);
@@ -1493,16 +1505,16 @@ function updateSimulateur() {
   slider.value = montant;
   document.getElementById('sim-slider-max').textContent = fmtE(sliderMax);
 
-  // Calcul économie IR (même logique que calcOptimalScenarios)
+  // Calcul économie IR — plafonné à l'IR de référence
   const theo = _ctx.irBase - calculateIR(Math.max(0, _ctx.revenuImposable - montant), _ctx.nbParts);
-  const economie = Math.min(_ctx.irNetReel, Math.max(0, theo));
-  const impotRestant = Math.max(0, _ctx.irNetReel - economie);
+  const economie = Math.min(irRef, Math.max(0, theo));
+  const impotRestant = Math.max(0, irRef - economie);   // toujours ≤ irRef
   const coutReel = Math.max(0, montant - economie);
 
   document.getElementById('sim-economie').textContent = fmtE(economie);
   document.getElementById('sim-economie-sub').textContent =
     montant > plafond
-      ? `⚠️ Dépasse le plafond (${fmtE(plafond)})`
+      ? `⚠️ Dépasse le plafond disponible (${fmtE(plafond)})`
       : `Pour ${fmtE(montant)} versés · TMI ${(_ctx.tmi*100).toFixed(0)}%`;
 
   const impotEl = document.getElementById('sim-impot-restant');
@@ -1511,7 +1523,9 @@ function updateSimulateur() {
   impotEl.style.color = impotRestant === 0 ? 'var(--success)' : 'var(--danger)';
   impotCard.style.borderColor = impotRestant === 0 ? 'var(--success)' : 'transparent';
   document.getElementById('sim-impot-sub').textContent =
-    impotRestant === 0 ? '✅ Impôt totalement annulé' : `Sur ${fmtE(_ctx.irNetReel)} d'IR initial`;
+    impotRestant === 0
+      ? '✅ Impôt totalement annulé'
+      : `Reste sur ${fmtE(irRef)} d'IR de départ`;
 
   document.getElementById('sim-cout-reel').textContent = fmtE(coutReel);
   document.getElementById('sim-cout-sub').textContent = `${fmtE(montant)} − ${fmtE(economie)} d'économie`;
