@@ -609,6 +609,13 @@
     <hr class="divider">
     <div class="section-title">Reports des années antérieures <span class="tag tag-green">Peut tripler votre plafond !</span></div>
 
+    <!-- Affiché uniquement quand le plafond est extrait de l'avis d'imposition -->
+    <div id="plafond-avis-box" class="info-box success" style="display:none; margin-bottom:16px;">
+      📄 <strong>Plafond extrait de votre avis d'imposition :</strong> <span id="plafond-avis-montant">—</span><br>
+      <span style="font-size:0.82rem;">Ce total inclut déjà votre plafond annuel <em>et</em> vos reports des 3 années précédentes. Les champs ci-dessous ne sont pas nécessaires.</span>
+    </div>
+
+    <div id="reports-section">
     <div class="form-grid-3">
       <div class="field">
         <label>Disponible non utilisé N-1 <span>(2023)</span></label>
@@ -622,6 +629,7 @@
         <label>Disponible non utilisé N-3 <span>(2021)</span></label>
         <input type="number" id="report-n3" placeholder="0" min="0" value="0">
       </div>
+    </div>
     </div>
 
     <div id="bloc-mutualisation" style="display:none; margin-top:16px;">
@@ -1755,7 +1763,14 @@ function resetUpload() {
   document.getElementById('extracted-fields').style.display = 'none';
   const inp = document.getElementById('pdf-input');
   if (inp) inp.value = '';
-  _plafondExtrait = 0; // Réinitialiser le plafond extrait
+  _plafondExtrait = 0;
+  const avisBox = document.getElementById('plafond-avis-box');
+  const reportsSection = document.getElementById('reports-section');
+  if (avisBox) avisBox.style.display = 'none';
+  if (reportsSection) reportsSection.style.opacity = '1';
+  // Réinitialiser le dataset.manual du champ ir-net pour autoriser l'auto-estimation
+  const irNetEl = document.getElementById('ir-net');
+  if (irNetEl) { irNetEl.dataset.manual = ''; irNetEl.value = ''; }
 }
 
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff'];
@@ -1887,33 +1902,47 @@ function prefillFromExtracted(data, fieldsFound) {
 
   // ── IR net — pré-remplissage ──────────────────────────────────────
   if (data.ir_net !== undefined) {
-    document.getElementById('ir-net').value = data.ir_net;
+    const irNetEl = document.getElementById('ir-net');
+    irNetEl.value = data.ir_net;
+    irNetEl.dataset.manual = 'true'; // empêche autoFillIrNet d'écraser la valeur extraite du PDF
+    updateIrNetHint();
     items.push({ label: 'Impôt net 2024', value: fmtE(data.ir_net), found: true });
   }
 
-  // ── Plafond PER — reports séparés par déclarant ──────────────────
+  // ── Plafond PER — extrait de l'avis d'imposition ─────────────────
   if (data.plafond_annuel) {
-    // Stocker le plafond extrait pour l'utiliser directement dans calculate()
-    // (évite la surestimation du plafond calculé depuis les revenus TNS)
+    // Le "Plafond pour les cotisations versées en 2024" de l'avis est le TOTAL disponible :
+    // il inclut déjà l'annuel + tous les reports N-1/N-2/N-3 des deux déclarants.
+    // On utilise ce total directement, sans ajouter les reports séparément.
     _plafondExtrait = data.plafond_annuel;
 
-    // Déclarant 1 → champs report-n1/n2/n3 (informatif uniquement, ne s'ajoutent pas au total)
-    if (data.report_n1_d1) { document.getElementById('report-n1').value = data.report_n1_d1; }
-    if (data.report_n2_d1) { document.getElementById('report-n2').value = data.report_n2_d1; }
-    if (data.report_n3_d1) { document.getElementById('report-n3').value = data.report_n3_d1; }
+    // Vider les champs de reports (déjà inclus dans le total de l'avis)
+    ['report-n1','report-n2','report-n3',
+     'report-conj-n1','report-conj-n2','report-conj-n3'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '0';
+    });
 
-    // Déclarant 2 (conjoint) → champs report-conj-n1/n2/n3
-    if (data.report_n1_d2) { document.getElementById('report-conj-n1').value = data.report_n1_d2; }
-    if (data.report_n2_d2) { document.getElementById('report-conj-n2').value = data.report_n2_d2; }
-    if (data.report_n3_d2) { document.getElementById('report-conj-n3').value = data.report_n3_d2; }
+    // Afficher la note "plafond depuis l'avis" dans l'étape 3
+    const avisBox = document.getElementById('plafond-avis-box');
+    const avisMontant = document.getElementById('plafond-avis-montant');
+    const reportsSection = document.getElementById('reports-section');
+    if (avisBox) {
+      const d1Info = data.plafond_d1 !== undefined ? ` (Décl.1 : ${fmtE(data.plafond_d1 || 0)} · Décl.2 : ${fmtE(data.plafond_d2 || 0)})` : '';
+      if (avisMontant) avisMontant.textContent = fmtE(data.plafond_annuel) + d1Info;
+      avisBox.style.display = 'block';
+    }
+    if (reportsSection) reportsSection.style.opacity = '0.4';
 
-    items.push({ label: 'Plafond PER total', value: fmtE(data.plafond_annuel), found: true });
-    if (data.plafond_d1 !== undefined) items.push({ label: '  Déclarant 1', value: fmtE(data.plafond_d1 || 0), found: true });
-    if (data.plafond_d2 !== undefined) items.push({ label: '  Déclarant 2 (conjoint)', value: fmtE(data.plafond_d2 || 0), found: true });
-    if (data.report_n1_d2) items.push({ label: '  Report N-1 conjoint', value: fmtE(data.report_n1_d2), found: true });
-    if (data.report_n2_d2) items.push({ label: '  Report N-2 conjoint', value: fmtE(data.report_n2_d2), found: true });
+    const d1Info = data.plafond_d1 !== undefined ? ` — Décl. 1 : ${fmtE(data.plafond_d1 || 0)} · Décl. 2 : ${fmtE(data.plafond_d2 || 0)}` : '';
+    items.push({ label: 'Plafond PER total (avis 2024)', value: fmtE(data.plafond_annuel) + d1Info, found: true });
   } else {
-    _plafondExtrait = 0; // Pas de plafond extrait → calcul depuis les revenus
+    _plafondExtrait = 0; // Pas de plafond extrait → calcul depuis les revenus + reports saisis
+    // Réinitialiser l'affichage de l'étape 3
+    const avisBox = document.getElementById('plafond-avis-box');
+    const reportsSection = document.getElementById('reports-section');
+    if (avisBox) avisBox.style.display = 'none';
+    if (reportsSection) reportsSection.style.opacity = '1';
     items.push({ label: 'Plafond PER', value: 'Calculé automatiquement', found: false });
   }
 
