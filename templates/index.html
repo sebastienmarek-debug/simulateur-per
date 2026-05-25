@@ -611,6 +611,20 @@
       </div>
     </div>
 
+    <div class="info-box" style="margin-bottom:16px; background:#fffbeb; border-color:#f59e0b;">
+      <strong>⚠️ Point clé pour un calcul précis de l'impôt restant</strong><br>
+      L'IR figurant sur votre avis intègre déjà la déduction PER versée en 2023.
+      Pour projeter correctement l'impôt de l'année prochaine, indiquez ci-dessous ce montant :
+      il sera rajouté à vos revenus pour reconstituer la vraie base de calcul avant tout versement 2024.
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>PER versé et déduit en 2023 <span>(figurant sur cet avis)</span></label>
+        <input type="number" id="per-deduit-2023" placeholder="0" min="0" value="0">
+        <div class="hint">Section « Charges déductibles — Épargne retraite » de l'avis d'imposition 2024. Laissez à 0 si aucun versement PER en 2023.</div>
+      </div>
+    </div>
+
     <hr class="divider">
     <div class="section-title">Reports des années antérieures <span class="tag tag-green">Peut tripler votre plafond !</span></div>
 
@@ -818,8 +832,8 @@
       <!-- Baseline IR -->
       <div id="sim-baseline" style="display:flex; align-items:center; gap:12px; background:var(--bg); border-radius:10px; padding:12px 16px; margin-bottom:16px; font-size:0.85rem;">
         <span style="font-size:1.2rem;">🧾</span>
-        <span>Impôt de référence : <strong id="sim-ir-base-label" style="color:var(--primary);">—</strong></span>
-        <span id="sim-ir-base-warning" style="color:var(--accent); font-weight:600; display:none;">⚠️ Renseignez votre impôt net réel (étape 2) pour un calcul précis</span>
+        <span>IR projeté sans PER 2024 : <strong id="sim-ir-base-label" style="color:var(--primary);">—</strong></span>
+        <span id="sim-ir-base-warning" style="color:var(--accent); font-weight:600; display:none;">⚠️ Indiquez le PER déduit en 2023 (étape 3) pour affiner la projection</span>
       </div>
 
       <div style="flex:1; min-width:200px; margin-bottom:20px;">
@@ -1160,40 +1174,35 @@ function calcPlafondTNS(revenusPro) {
 // ============================================================
 // CALCUL DES SCÉNARIOS OPTIMAUX
 // ============================================================
-// Calcule le versement minimal pour annuler entièrement irNetReel
-// (au-delà : chaque euro supplémentaire n'économise plus d'impôt)
-function calcVersementUtileMax(revenuImposable, nbParts, irBase, irNetReel) {
-  if (irNetReel <= 0) return 0;
-  if (irBase <= irNetReel) return revenuImposable; // modèle brut < impôt réel, pas de cap utile
-
-  // On cherche D tel que irBase - IR(RI-D) >= irNetReel
-  // i.e., IR(RI-D) <= irBase - irNetReel
-  const targetIR = irBase - irNetReel;
-  let lo = 0, hi = revenuImposable;
+// Calcule le versement minimal pour ramener l'IR à 0 (projection année prochaine).
+// Au-delà, chaque euro supplémentaire n'apporte plus aucune économie fiscale.
+function calcVersementUtileMax(revenuBrut, nbParts, irBase) {
+  if (irBase <= 0) return 0;
+  // On cherche v tel que calculateIR(revenuBrut - v) = 0
+  let lo = 0, hi = revenuBrut;
   for (let i = 0; i < 40; i++) {
     const mid = (lo + hi) / 2;
-    if (calculateIR(Math.max(0, revenuImposable - mid), nbParts) <= targetIR) hi = mid;
+    if (calculateIR(Math.max(0, revenuBrut - mid), nbParts) <= 0) hi = mid;
     else lo = mid;
   }
   return Math.ceil(hi / 100) * 100;
 }
 
-function calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, irBase, irNetReel) {
+function calcOptimalScenarios(revenuBrut, nbParts, plafondDisponible, tmi, irBase) {
   const SEUILS = [180294, 83823, 29315, 11497, 0];
   const scenarios = [];
-  const qi = revenuImposable / nbParts;
+  const qi = revenuBrut / nbParts;
 
-  // Versement au-delà duquel il n'y a plus d'économie fiscale immédiate
+  // Versement au-delà duquel l'IR projeté est à 0 (aucune économie supplémentaire possible)
   const versUtileMax = Math.min(plafondDisponible,
-    calcVersementUtileMax(revenuImposable, nbParts, irBase, irNetReel));
+    calcVersementUtileMax(revenuBrut, nbParts, irBase));
 
-  // L'économie réelle est plafonnée à l'impôt effectivement payé
+  // Économie = irBase (sans PER 2024) − IR projeté (avec PER 2024)
   function realSavings(amount) {
-    const theo = irBase - calculateIR(Math.max(0, revenuImposable - amount), nbParts);
-    return Math.min(irNetReel, Math.max(0, theo));
+    return Math.max(0, irBase - calculateIR(Math.max(0, revenuBrut - amount), nbParts));
   }
 
-  if (versUtileMax <= 0 || irNetReel <= 0) {
+  if (versUtileMax <= 0 || irBase <= 0) {
     // Non imposable : aucun scénario fiscal pertinent
     scenarios.push({
       id: 'nonimposable', label: 'Non imposable',
@@ -1210,7 +1219,7 @@ function calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, 
     const amountToFloor = Math.min(Math.ceil((qi - bracketFloor) * nbParts) + 50, versUtileMax);
     if (amountToFloor >= 200) {
       const savingsA = realSavings(amountToFloor);
-      const newTMI   = getTMI(Math.max(0, revenuImposable - amountToFloor - 1), nbParts);
+      const newTMI   = getTMI(Math.max(0, revenuBrut - amountToFloor - 1), nbParts);
       scenarios.push({
         id: 'tranche', label: 'Optimisation de tranche',
         badge: '⭐ Meilleur rendement', badgeClass: 'sc-badge-green',
@@ -1314,7 +1323,7 @@ function calculate() {
   const plafondConj = plafondAnnuelConj + totalReportsConj;
   const plafondDisponible = Math.max(0, plafondTotal + (state.situation === 'marie' || state.situation === 'pacse' ? plafondConj : 0));
 
-  // --- Calcul TMI actuelle ---
+  // --- Calcul du revenu imposable déclaré (tel que sur l'avis, après déduction PER 2023) ---
   let revenuImposable = 0;
   if (state.statut === 'tns' || state.statut === 'agriculteur') {
     revenuImposable = revenusTNS + revFonciers + autresRev;
@@ -1324,32 +1333,38 @@ function calculate() {
     revenuImposable = netImpSalarie + netImpConj + revFonciers + autresRev;
   }
 
-  // TMI : priorité à la valeur de l'avis d'imposition (plus fiable que le barème recalculé)
-  const tmiAvisVal = numVal('tmi-avis');
-  const tmi = tmiAvisVal > 0 ? tmiAvisVal / 100 : getTMI(revenuImposable, nbParts);
+  // revenuBrut = revenu AVANT toute déduction PER.
+  // Le PER versé en 2023 a réduit le revenu imposable figurant sur l'avis.
+  // Pour projeter l'IR 2025 (sur revenus 2024), il faut repartir de ce revenu brut,
+  // car la déduction 2023 ne s'appliquera plus — seule la nouvelle déduction 2024 comptera.
+  const perDeduit2023 = numVal('per-deduit-2023');
+  const revenuBrut = revenuImposable + perDeduit2023;
 
-  const irBase = calculateIR(revenuImposable, nbParts);
-
-  // IR réellement payé (depuis avis d'imposition ou saisi manuellement)
-  // On lit la valeur brute pour distinguer "champ vide" de "valeur nulle ou négative"
+  // IR réellement payé cette année (avis) — pour info et affichage uniquement
   const irNetRaw = document.getElementById('ir-net')?.value?.trim();
   const irNetFilled = irNetRaw !== '' && irNetRaw !== null && irNetRaw !== undefined;
-  // Si le champ est rempli (même négatif = crédit d'impôt > impôt → IR effectif = 0)
-  // Si le champ est vide → on utilise irBase (estimation barème)
-  const irNetReel = irNetFilled ? Math.max(0, parseFloat(irNetRaw) || 0) : irBase;
+  const irNetReel = irNetFilled ? Math.max(0, parseFloat(irNetRaw) || 0) : null;
+
+  // irBase = IR projeté pour l'ANNÉE PROCHAINE si aucun versement PER en 2024.
+  // Base = revenuBrut (revenus reconstitués avant déduction PER).
+  const irBase = calculateIR(revenuBrut, nbParts);
+
+  // TMI : priorité à la valeur de l'avis d'imposition (plus fiable que le barème recalculé)
+  const tmiAvisVal = numVal('tmi-avis');
+  const tmi = tmiAvisVal > 0 ? tmiAvisVal / 100 : getTMI(revenuBrut, nbParts);
 
   // TMI à la retraite
   const revRetEstime = numVal('revenus-retraite') || 0;
   const tmiRet = revRetEstime > 0
     ? getTMI(revRetEstime, nbParts)
-    : getTMI(revenuImposable * 0.60, nbParts);
+    : getTMI(revenuBrut * 0.60, nbParts);
 
-  // Scénarios optimaux
-  const scenarios = calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, irBase, irNetReel);
+  // Scénarios optimaux — basés sur revenuBrut (projection année prochaine)
+  const scenarios = calcOptimalScenarios(revenuBrut, nbParts, plafondDisponible, tmi, irBase);
 
   // Stocker le contexte global
   _ctx = { prenom, age, nbParts, ageRet, annees, rendement, tmi, tmiRet, irBase,
-           irNetReel,
+           irNetReel, revenuBrut, perDeduit2023,
            revenuImposable, plafondDisponible, plafondAnnuel, plafondAnnuelConj,
            reportN1, reportN2, reportN3, reportConj, deja, scenarios,
            salarieSuffix: state.statut==='tns'||state.statut==='agriculteur'?'TNS/Agri':'Salarié',
@@ -1393,7 +1408,8 @@ function calculate() {
 
   // Cartes scénarios
   const grid = document.getElementById('res-scenarios-grid');
-  const irRestant = (s) => Math.max(0, _ctx.irNetReel - s.savings);
+  // Impôt restant = IR projeté après déduction du nouveau versement PER 2024
+  const irRestant = (s) => Math.max(0, calculateIR(Math.max(0, _ctx.revenuBrut - s.amount), _ctx.nbParts));
 
   grid.innerHTML = scenarios.map(s => `
     <div class="scenario-card ${s.recommended ? 'recommended' : ''}" id="sc-${s.id}" onclick="selectScenario('${s.id}')">
@@ -1442,14 +1458,17 @@ function selectScenario(id) {
   card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   // KPIs
-  const impotRestant = Math.max(0, _ctx.irNetReel - economieIR);
+  // Impôt restant = projection IR année prochaine après déduction du versement PER 2024
+  const impotRestant = Math.max(0, calculateIR(Math.max(0, _ctx.revenuBrut - versement), _ctx.nbParts));
   document.getElementById('res-economie').textContent = fmtE(economieIR);
-  document.getElementById('res-economie-sub').textContent = `Réduction immédiate pour un versement de ${fmtE(versement)}`;
+  document.getElementById('res-economie-sub').textContent = `Réduction pour un versement de ${fmtE(versement)} · base ${fmtE(_ctx.irBase)} sans PER`;
   document.getElementById('res-tmi-badge').textContent = `TMI ${(tmi*100).toFixed(0)}%`;
   const irCard = document.getElementById('res-impot-restant-card');
   document.getElementById('res-impot-restant').textContent = fmtE(impotRestant);
   document.getElementById('res-impot-restant-sub').textContent =
-    impotRestant === 0 ? '✅ Impôt annulé' : `Reste sur ${fmtE(_ctx.irNetReel)} d'IR initial`;
+    impotRestant === 0
+      ? '✅ Impôt annulé (projection 2025)'
+      : `IR prévisionnel 2025${_ctx.irNetReel !== null ? ` · avis 2024 : ${fmtE(_ctx.irNetReel)}` : ''}`;
   if (irCard) {
     irCard.style.borderColor = impotRestant === 0 ? 'var(--success)' : 'var(--danger-light)';
     irCard.querySelector('.rc-value').style.color = impotRestant === 0 ? 'var(--success)' : 'var(--danger)';
@@ -1499,12 +1518,16 @@ function updateSimulateur() {
   if (!_ctx || !_ctx.irBase) return;
   const montant = Math.max(0, parseFloat(document.getElementById('sim-montant').value) || 0);
   const plafond = _ctx.plafondDisponible;
-  const irRef   = _ctx.irNetReel;   // = valeur saisie dans "impôt net", ou irBase si absent
-  const irEstime = (_ctx.irNetReel === _ctx.irBase); // true si le champ ir-net n'était pas rempli
 
-  // Afficher la baseline et l'avertissement éventuel
-  document.getElementById('sim-ir-base-label').textContent = fmtE(irRef);
-  document.getElementById('sim-ir-base-warning').style.display = irEstime ? 'inline' : 'none';
+  // Base de simulation = IR projeté sans PER 2024 (revenuBrut → barème)
+  const irBase   = _ctx.irBase;
+  const showAvis = _ctx.irNetReel !== null;
+
+  // Afficher la baseline : IR projeté sans PER 2024 + IR avis pour info
+  document.getElementById('sim-ir-base-label').textContent = fmtE(irBase)
+    + (showAvis ? ` · avis 2024 : ${fmtE(_ctx.irNetReel)}` : '');
+  document.getElementById('sim-ir-base-warning').style.display =
+    (_ctx.perDeduit2023 === 0 && !showAvis) ? 'inline' : 'none';
 
   // Synchroniser slider et max
   const sliderMax = Math.max(plafond, montant, 50000);
@@ -1513,10 +1536,10 @@ function updateSimulateur() {
   slider.value = montant;
   document.getElementById('sim-slider-max').textContent = fmtE(sliderMax);
 
-  // Calcul économie IR — plafonné à l'IR de référence
-  const theo = _ctx.irBase - calculateIR(Math.max(0, _ctx.revenuImposable - montant), _ctx.nbParts);
-  const economie = Math.min(irRef, Math.max(0, theo));
-  const impotRestant = Math.max(0, irRef - economie);   // toujours ≤ irRef
+  // Économie IR = irBase − IR projeté avec versement (projection année prochaine)
+  const irAvecVersement = calculateIR(Math.max(0, _ctx.revenuBrut - montant), _ctx.nbParts);
+  const economie = Math.max(0, irBase - irAvecVersement);
+  const impotRestant = Math.max(0, irAvecVersement);
   const coutReel = Math.max(0, montant - economie);
 
   document.getElementById('sim-economie').textContent = fmtE(economie);
@@ -1532,8 +1555,8 @@ function updateSimulateur() {
   impotCard.style.borderColor = impotRestant === 0 ? 'var(--success)' : 'transparent';
   document.getElementById('sim-impot-sub').textContent =
     impotRestant === 0
-      ? '✅ Impôt totalement annulé'
-      : `Reste sur ${fmtE(irRef)} d'IR de départ`;
+      ? '✅ Impôt annulé (projection 2025)'
+      : `IR prévisionnel 2025 (base ${fmtE(irBase)} sans PER)`;
 
   document.getElementById('sim-cout-reel').textContent = fmtE(coutReel);
   document.getElementById('sim-cout-sub').textContent = `${fmtE(montant)} − ${fmtE(economie)} d'économie`;
@@ -1882,6 +1905,15 @@ function prefillFromExtracted(data, fieldsFound) {
     irNetEl.dataset.manual = 'true'; // bloque autoFillIrNet pour ne pas écraser la valeur du PDF
     updateIrNetHint();
     items.push({ label: 'Impôt net 2024', value: fmtE(data.ir_net), found: true });
+  }
+
+  // ── PER déduit en 2023 (pour reconstituer le revenu brut) ────────
+  if (data.per_deduit_2023) {
+    const perDeduitEl = document.getElementById('per-deduit-2023');
+    if (perDeduitEl) perDeduitEl.value = data.per_deduit_2023;
+    items.push({ label: 'PER déduit en 2023 (avis)', value: fmtE(data.per_deduit_2023), found: true });
+  } else {
+    items.push({ label: 'PER déduit 2023', value: 'À vérifier sur charges déductibles', found: false });
   }
 
   // ── Reports PER — pré-remplissage depuis l'avis ──────────────────

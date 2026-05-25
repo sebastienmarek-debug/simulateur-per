@@ -60,7 +60,8 @@ Retourne UNIQUEMENT le JSON — aucun texte avant ou après.
   "report_n1_d1": <Plafond non utilisé N-1 déclarant 1, entier €>,
   "report_n1_d2": <Plafond non utilisé N-1 déclarant 2, entier €>,
   "report_n2_d1": <Plafond non utilisé N-2 déclarant 1, entier €>,
-  "report_n2_d2": <Plafond non utilisé N-2 déclarant 2, entier €>
+  "report_n2_d2": <Plafond non utilisé N-2 déclarant 2, entier €>,
+  "per_deduit_2023": <Montant total des versements PER déduits du revenu imposable sur CET avis (section "Charges déductibles" ou "Épargne retraite" de l'avis). C'est le montant effectivement versé en 2023 et déduit sur la déclaration 2024. Entier € ou null si non trouvé.>
 }
 
 RÈGLES IMPORTANTES :
@@ -71,6 +72,7 @@ RÈGLES IMPORTANTES :
 5. tmi_declare : cherche "Taux marginal d'imposition" suivi d'un pourcentage.
 6. plafonds PER : section "PLAFOND EPARGNE RETRAITE". Additionner D1+D2 pour plafond_total_per. Ignorer la colonne Enfant.
 7. salaire_1/salaire_2 : prendre le montant AVANT abattement (case 1AJ/1BJ), pas le net après déduction.
+8. per_deduit_2023 : cherche dans la section "CHARGES DÉDUCTIBLES" ou "Charges déductibles du revenu brut global" : ligne "Épargne retraite (PER)", "Plan d'épargne retraite", "Cotisations PER" — c'est le montant déduit en 2023 qui a réduit l'IR figurant sur cet avis.
 """
 
 # ─────────────────────────────────────────────
@@ -264,6 +266,19 @@ def parse_with_regex(text):
         tmi_val = float(tmi_int + ('.' + tmi_dec if tmi_dec else ''))
         data['tmi_declare'] = tmi_val
         fields_found.append(f'TMI déclaré ({tmi_val:.0f}%)')
+
+    # ── PER déduit en 2023 (charges déductibles) ────────────────────
+    m = find_first([
+        r'[eé]pargne\s+retraite\s*(?:\(PER\))?\s*[\s:]+(\d[\d\s]{2,10})',
+        r'plan\s+d[\'’][eé]pargne\s+retraite[^0-9]{0,50}(\d[\d\s]{2,10})',
+        r'cotisations?\s+(?:vers[eé]es?\s+(?:sur|aux?)\s+)?(?:plans?\s+d[\'’]|au\s+|sur\s+votre\s+)?PER[^0-9]{0,30}(\d[\d\s]{2,10})',
+        r'charges?\s+d[eé]ductibles[^0-9]{0,200}PER[^0-9]{0,50}(\d[\d\s]{2,10})',
+    ], text)
+    if m:
+        n = clean_number(m.group(1)[:12])
+        if n and n > 100:
+            data['per_deduit_2023'] = n
+            fields_found.append(f'PER déduit 2023 ({n:,} €)')
 
     # ── Section Plafonds Épargne Retraite ────────────────────────────
     per_m = re.search(r'PLAFOND\s+EPARGNE\s+RETRAITE(.{50,2000}?)(?:\n[-\u2500]{10}|\Z)', text, re.IGNORECASE | re.DOTALL)
