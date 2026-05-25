@@ -139,8 +139,11 @@ def parse_with_regex(text):
     # ── Nombre de parts ─────────────────────────────────────────────
     m = find_first([
         r'nombre\s+de\s+parts?\s*(?:du\s+foyer)?\s*[:\s=]+\s*(\d+[,\.]\d+|\d+)',
-        r'quotient\s+familial[^\d]*(\d+[,\.\s]\d+)',
-        r'\bM\s+(\d+[,\.]\d+)\b',
+        r'quotient\s+familial[^\d]*(\d+[,\.]\d+)',
+        # Format avis d'imposition DGFiP : "M 1\n2,50" (M=marié, 1=page, 2,50=parts)
+        r'\bM\s+\d+\s*\n\s*(\d+[,\.]\d+)',
+        # Format alternatif : décimal autonome sur la ligne suivante un entier seul
+        r'\n\d+\n(\d+[,\.]\d+)\n',
     ], text)
     if m:
         data['parts'] = float(m.group(1).replace(',', '.').replace(' ', ''))
