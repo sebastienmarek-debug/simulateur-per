@@ -754,12 +754,17 @@
   <!-- DÉTAIL DU SCÉNARIO SÉLECTIONNÉ -->
   <div id="bloc-detail" style="display:none;">
 
-    <div class="results-grid">
+    <div class="results-grid" style="grid-template-columns:1fr 1fr 1fr;">
       <div class="result-card highlight">
         <div class="rc-label">Économie d'impôt immédiate</div>
         <div class="rc-value" id="res-economie">—</div>
         <div class="rc-sub" id="res-economie-sub">Réduction d'impôt sur le revenu</div>
         <div class="rc-badge" id="res-tmi-badge" style="background:rgba(255,255,255,0.2);color:white;">TMI —</div>
+      </div>
+      <div class="result-card" id="res-impot-restant-card">
+        <div class="rc-label">Impôt restant à payer</div>
+        <div class="rc-value" id="res-impot-restant">—</div>
+        <div class="rc-sub" id="res-impot-restant-sub">Après déduction PER</div>
       </div>
       <div class="result-card">
         <div class="rc-label">Coût réel après économie fiscale</div>
@@ -797,6 +802,47 @@
           </thead>
           <tbody id="res-compare-body"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- SIMULATEUR MONTANT PERSONNALISÉ -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">🎯 Simulateur personnalisé</div>
+      <div class="card-subtitle">Entrez le montant que votre client souhaite verser — l'économie fiscale et l'impôt restant se calculent en temps réel.</div>
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:20px;">
+        <div style="flex:1; min-width:200px;">
+          <label style="font-size:0.82rem; font-weight:600; color:var(--primary); display:block; margin-bottom:6px;">Montant versé sur le PER</label>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <input type="number" id="sim-montant" min="0" placeholder="ex : 5000"
+              oninput="updateSimulateur()"
+              style="border:2px solid var(--primary-light); border-radius:var(--radius-sm); padding:10px 14px; font-size:1.1rem; font-weight:700; color:var(--primary); width:180px; outline:none;">
+            <span style="color:var(--text-muted); font-size:0.9rem;">€</span>
+          </div>
+          <input type="range" id="sim-slider" min="0" max="50000" step="100" value="0"
+            oninput="document.getElementById('sim-montant').value=this.value; updateSimulateur()"
+            style="width:100%; margin-top:10px; accent-color:var(--primary);">
+          <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-muted);">
+            <span>0 €</span>
+            <span id="sim-slider-max">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="results-grid" style="grid-template-columns:1fr 1fr 1fr; margin-bottom:0;">
+        <div class="result-card" style="border:2px solid var(--success-light);">
+          <div class="rc-label">Économie d'impôt</div>
+          <div class="rc-value" id="sim-economie" style="color:var(--success);">—</div>
+          <div class="rc-sub" id="sim-economie-sub">—</div>
+        </div>
+        <div class="result-card" id="sim-impot-card">
+          <div class="rc-label">Impôt restant à payer</div>
+          <div class="rc-value" id="sim-impot-restant">—</div>
+          <div class="rc-sub" id="sim-impot-sub">Après déduction</div>
+        </div>
+        <div class="result-card">
+          <div class="rc-label">Coût réel du versement</div>
+          <div class="rc-value" id="sim-cout-reel">—</div>
+          <div class="rc-sub" id="sim-cout-sub">Versement − économie fiscale</div>
+        </div>
       </div>
     </div>
 
@@ -1289,6 +1335,7 @@ function calculate() {
 
   // Stocker le contexte global
   _ctx = { prenom, age, nbParts, ageRet, annees, rendement, tmi, tmiRet, irBase,
+           irNetReel,
            revenuImposable, plafondDisponible, plafondAnnuel, plafondAnnuelConj,
            reportN1, reportN2, reportN3, reportConj, deja, scenarios,
            salarieSuffix: state.statut==='tns'||state.statut==='agriculteur'?'TNS/Agri':'Salarié',
@@ -1332,12 +1379,15 @@ function calculate() {
 
   // Cartes scénarios
   const grid = document.getElementById('res-scenarios-grid');
+  const irRestant = (s) => Math.max(0, _ctx.irNetReel - s.savings);
+
   grid.innerHTML = scenarios.map(s => `
     <div class="scenario-card ${s.recommended ? 'recommended' : ''}" id="sc-${s.id}" onclick="selectScenario('${s.id}')">
       <div class="sc-check">✓</div>
       <div><span class="sc-badge ${s.badgeClass}">${s.badge}</span></div>
       <div class="sc-amount">${fmtE(s.amount)}</div>
-      <div class="sc-saving">Économie IR : ${fmtE(s.savings)}</div>
+      <div class="sc-saving">Économie IR : <b>${fmtE(s.savings)}</b></div>
+      <div class="sc-cout">Impôt restant : <b style="color:${irRestant(s)===0?'var(--success)':'var(--danger)'}">${irRestant(s)===0?'0 € ✓':fmtE(irRestant(s))}</b></div>
       <div class="sc-cout">Coût réel : ${fmtE(s.amount - s.savings)}</div>
       <div class="sc-desc">${s.desc}</div>
     </div>`).join('');
@@ -1378,12 +1428,26 @@ function selectScenario(id) {
   card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   // KPIs
+  const impotRestant = Math.max(0, _ctx.irNetReel - economieIR);
   document.getElementById('res-economie').textContent = fmtE(economieIR);
   document.getElementById('res-economie-sub').textContent = `Réduction immédiate pour un versement de ${fmtE(versement)}`;
   document.getElementById('res-tmi-badge').textContent = `TMI ${(tmi*100).toFixed(0)}%`;
+  const irCard = document.getElementById('res-impot-restant-card');
+  document.getElementById('res-impot-restant').textContent = fmtE(impotRestant);
+  document.getElementById('res-impot-restant-sub').textContent =
+    impotRestant === 0 ? '✅ Impôt annulé' : `Reste sur ${fmtE(_ctx.irNetReel)} d'IR initial`;
+  if (irCard) {
+    irCard.style.borderColor = impotRestant === 0 ? 'var(--success)' : 'var(--danger-light)';
+    irCard.querySelector('.rc-value').style.color = impotRestant === 0 ? 'var(--success)' : 'var(--danger)';
+  }
   document.getElementById('res-cout-reel').textContent = fmtE(versement - economieIR);
   document.getElementById('res-cout-sub').textContent = `${fmtE(versement)} versé − ${fmtE(economieIR)} d'économie fiscale`;
   document.getElementById('res-versement-badge').textContent = `Versement ${fmtE(versement)}`;
+
+  // Pré-remplir le simulateur avec ce scénario
+  document.getElementById('sim-montant').value = versement;
+  document.getElementById('sim-slider').value = versement;
+  updateSimulateur();
   document.getElementById('res-capital-brut').textContent = fmtE(capitalBrut);
   document.getElementById('res-age-retraite-label').textContent = _ctx.ageRet;
   document.getElementById('res-rendement-label').textContent = (rendement*100).toFixed(0);
@@ -1412,6 +1476,45 @@ function selectScenario(id) {
 
   // Graphiques
   buildCharts(annees, rendement, versement, capitalNetAD, capitalNetSD, impotSortieAD, pfuGains, psGains);
+}
+
+// ============================================================
+// SIMULATEUR MONTANT PERSONNALISÉ
+// ============================================================
+function updateSimulateur() {
+  if (!_ctx.irNetReel) return;
+  const montant = Math.max(0, parseFloat(document.getElementById('sim-montant').value) || 0);
+  const plafond = _ctx.plafondDisponible;
+
+  // Synchroniser slider et max
+  const sliderMax = Math.max(plafond, montant, 50000);
+  const slider = document.getElementById('sim-slider');
+  slider.max = sliderMax;
+  slider.value = montant;
+  document.getElementById('sim-slider-max').textContent = fmtE(sliderMax);
+
+  // Calcul économie IR (même logique que calcOptimalScenarios)
+  const theo = _ctx.irBase - calculateIR(Math.max(0, _ctx.revenuImposable - montant), _ctx.nbParts);
+  const economie = Math.min(_ctx.irNetReel, Math.max(0, theo));
+  const impotRestant = Math.max(0, _ctx.irNetReel - economie);
+  const coutReel = Math.max(0, montant - economie);
+
+  document.getElementById('sim-economie').textContent = fmtE(economie);
+  document.getElementById('sim-economie-sub').textContent =
+    montant > plafond
+      ? `⚠️ Dépasse le plafond (${fmtE(plafond)})`
+      : `Pour ${fmtE(montant)} versés · TMI ${(_ctx.tmi*100).toFixed(0)}%`;
+
+  const impotEl = document.getElementById('sim-impot-restant');
+  const impotCard = document.getElementById('sim-impot-card');
+  impotEl.textContent = fmtE(impotRestant);
+  impotEl.style.color = impotRestant === 0 ? 'var(--success)' : 'var(--danger)';
+  impotCard.style.borderColor = impotRestant === 0 ? 'var(--success)' : 'transparent';
+  document.getElementById('sim-impot-sub').textContent =
+    impotRestant === 0 ? '✅ Impôt totalement annulé' : `Sur ${fmtE(_ctx.irNetReel)} d'IR initial`;
+
+  document.getElementById('sim-cout-reel').textContent = fmtE(coutReel);
+  document.getElementById('sim-cout-sub').textContent = `${fmtE(montant)} − ${fmtE(economie)} d'économie`;
 }
 
 // ============================================================
