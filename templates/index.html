@@ -1123,9 +1123,10 @@ function calculateIR(revImposable, nbParts) {
   if (revImposable <= 0) return 0;
   const qi = revImposable / nbParts;
   let ir = 0;
-  for (let i = 1; i < IR_BAREME.length; i++) {
-    const minS = IR_BAREME[i-1].seuil;
-    const maxS = (i < IR_BAREME.length - 1) ? IR_BAREME[i].seuil : Infinity;
+  // Chaque tranche i : revenu entre IR_BAREME[i].seuil et IR_BAREME[i+1].seuil, taxé à IR_BAREME[i].taux
+  for (let i = 0; i < IR_BAREME.length; i++) {
+    const minS = IR_BAREME[i].seuil;
+    const maxS = (i < IR_BAREME.length - 1) ? IR_BAREME[i + 1].seuil : Infinity;
     if (qi > minS) ir += (Math.min(qi, maxS) - minS) * IR_BAREME[i].taux;
   }
   return Math.max(0, ir * nbParts);
@@ -1135,8 +1136,9 @@ function getTMI(revImposable, nbParts) {
   if (revImposable <= 0) return 0;
   const qi = revImposable / nbParts;
   let tmi = 0;
-  for (let i = 1; i < IR_BAREME.length; i++) {
-    if (qi > IR_BAREME[i-1].seuil) tmi = IR_BAREME[i].taux;
+  // TMI = taux de la dernière tranche atteinte
+  for (let i = 0; i < IR_BAREME.length; i++) {
+    if (qi > IR_BAREME[i].seuil) tmi = IR_BAREME[i].taux;
   }
   return tmi;
 }
