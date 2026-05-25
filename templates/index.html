@@ -1255,6 +1255,9 @@ function calcOptimalScenarios(revenuImposable, nbParts, plafondDisponible, tmi, 
 // Contexte global partagé entre calculate() et selectScenario()
 let _ctx = {};
 
+// Plafond extrait de l'avis d'imposition (0 = non extrait, calculé depuis les revenus)
+let _plafondExtrait = 0;
+
 // ============================================================
 // CALCUL PRINCIPAL
 // ============================================================
@@ -1305,9 +1308,15 @@ function calculate() {
   // Total plafond disponible
   const totalReports = reportN1 + reportN2 + reportN3;
   const totalReportsConj = reportConj;
-  const plafondTotal = plafondAnnuel + totalReports - deja;
-  const plafondConj = plafondAnnuelConj + totalReportsConj;
-  const plafondDisponible = Math.max(0, plafondTotal + (state.situation === 'marie' || state.situation === 'pacse' ? plafondConj : 0));
+  let plafondDisponible;
+  if (_plafondExtrait > 0) {
+    // Utiliser le plafond extrait de l'avis d'imposition (inclut déjà les reports)
+    plafondDisponible = Math.max(0, _plafondExtrait - deja);
+  } else {
+    const plafondTotal = plafondAnnuel + totalReports - deja;
+    const plafondConj = plafondAnnuelConj + totalReportsConj;
+    plafondDisponible = Math.max(0, plafondTotal + (state.situation === 'marie' || state.situation === 'pacse' ? plafondConj : 0));
+  }
 
   // --- Calcul TMI actuelle ---
   let revenuImposable = 0;
@@ -1344,6 +1353,7 @@ function calculate() {
            irNetReel,
            revenuImposable, plafondDisponible, plafondAnnuel, plafondAnnuelConj,
            reportN1, reportN2, reportN3, reportConj, deja, scenarios,
+           plafondExtrait: _plafondExtrait,
            salarieSuffix: state.statut==='tns'||state.statut==='agriculteur'?'TNS/Agri':'Salarié',
            isTNS: state.statut==='tns'||state.statut==='agriculteur',
            isCouple: state.situation==='marie'||state.situation==='pacse' };
@@ -1365,16 +1375,27 @@ function calculate() {
   ].join('');
 
   // Plafond breakdown
-  document.getElementById('res-plafond-detail').innerHTML = `
-    <div class="plafond-row"><span class="pl-label">Plafond annuel ${_ctx.salarieSuffix} (revenus ${_ctx.isTNS?'2024':'2023'})</span><span class="pl-value">${fmtE(plafondAnnuel)}</span></div>
-    ${_ctx.isCouple ? `<div class="plafond-row"><span class="pl-label">Plafond annuel conjoint</span><span class="pl-value">${fmtE(plafondAnnuelConj)}</span></div>` : ''}
-    <div class="plafond-row"><span class="pl-label">Report N-1 (2023)</span><span class="pl-value">${fmtE(reportN1)}</span></div>
-    <div class="plafond-row"><span class="pl-label">Report N-2 (2022)</span><span class="pl-value">${fmtE(reportN2)}</span></div>
-    <div class="plafond-row"><span class="pl-label">Report N-3 (2021)</span><span class="pl-value">${fmtE(reportN3)}</span></div>
-    ${_ctx.isCouple ? `<div class="plafond-row"><span class="pl-label">Reports conjoint (N-1 à N-3)</span><span class="pl-value">${fmtE(reportConj)}</span></div>` : ''}
-    <div class="plafond-row total"><span class="pl-label">Total brut disponible</span><span class="pl-value">${fmtE(plafondDisponible + deja)}</span></div>
-    ${deja > 0 ? `<div class="plafond-row used"><span class="pl-label">Déjà versé en 2024</span><span class="pl-value">− ${fmtE(deja)}</span></div>` : ''}
-    <div class="plafond-row available"><span class="pl-label">🟢 Reste à utiliser</span><span class="pl-value">${fmtE(plafondDisponible)}</span></div>`;
+  if (_plafondExtrait > 0) {
+    // Plafond extrait directement de l'avis d'imposition (inclut déjà reports)
+    document.getElementById('res-plafond-detail').innerHTML = `
+      <div class="plafond-row" style="background:#eff6ff;border-radius:6px;padding:10px 12px;margin-bottom:6px;">
+        <span class="pl-label">📄 Source : avis d'imposition 2024</span>
+        <span class="pl-value" style="color:#2563eb">${fmtE(_plafondExtrait)}</span>
+      </div>
+      ${deja > 0 ? `<div class="plafond-row used"><span class="pl-label">Déjà versé en 2024</span><span class="pl-value">− ${fmtE(deja)}</span></div>` : ''}
+      <div class="plafond-row available"><span class="pl-label">🟢 Reste à utiliser</span><span class="pl-value">${fmtE(plafondDisponible)}</span></div>`;
+  } else {
+    document.getElementById('res-plafond-detail').innerHTML = `
+      <div class="plafond-row"><span class="pl-label">Plafond annuel ${_ctx.salarieSuffix} (revenus ${_ctx.isTNS?'2024':'2023'})</span><span class="pl-value">${fmtE(plafondAnnuel)}</span></div>
+      ${_ctx.isCouple ? `<div class="plafond-row"><span class="pl-label">Plafond annuel conjoint</span><span class="pl-value">${fmtE(plafondAnnuelConj)}</span></div>` : ''}
+      <div class="plafond-row"><span class="pl-label">Report N-1 (2023)</span><span class="pl-value">${fmtE(reportN1)}</span></div>
+      <div class="plafond-row"><span class="pl-label">Report N-2 (2022)</span><span class="pl-value">${fmtE(reportN2)}</span></div>
+      <div class="plafond-row"><span class="pl-label">Report N-3 (2021)</span><span class="pl-value">${fmtE(reportN3)}</span></div>
+      ${_ctx.isCouple ? `<div class="plafond-row"><span class="pl-label">Reports conjoint (N-1 à N-3)</span><span class="pl-value">${fmtE(reportConj)}</span></div>` : ''}
+      <div class="plafond-row total"><span class="pl-label">Total brut disponible</span><span class="pl-value">${fmtE(plafondDisponible + deja)}</span></div>
+      ${deja > 0 ? `<div class="plafond-row used"><span class="pl-label">Déjà versé en 2024</span><span class="pl-value">− ${fmtE(deja)}</span></div>` : ''}
+      <div class="plafond-row available"><span class="pl-label">🟢 Reste à utiliser</span><span class="pl-value">${fmtE(plafondDisponible)}</span></div>`;
+  }
   document.getElementById('res-plafond-dispo').textContent = fmtE(plafondDisponible);
 
   // Sous-titre scénarios
@@ -1734,6 +1755,7 @@ function resetUpload() {
   document.getElementById('extracted-fields').style.display = 'none';
   const inp = document.getElementById('pdf-input');
   if (inp) inp.value = '';
+  _plafondExtrait = 0; // Réinitialiser le plafond extrait
 }
 
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/bmp', 'image/tiff'];
@@ -1871,7 +1893,11 @@ function prefillFromExtracted(data, fieldsFound) {
 
   // ── Plafond PER — reports séparés par déclarant ──────────────────
   if (data.plafond_annuel) {
-    // Déclarant 1 → champs report-n1/n2/n3
+    // Stocker le plafond extrait pour l'utiliser directement dans calculate()
+    // (évite la surestimation du plafond calculé depuis les revenus TNS)
+    _plafondExtrait = data.plafond_annuel;
+
+    // Déclarant 1 → champs report-n1/n2/n3 (informatif uniquement, ne s'ajoutent pas au total)
     if (data.report_n1_d1) { document.getElementById('report-n1').value = data.report_n1_d1; }
     if (data.report_n2_d1) { document.getElementById('report-n2').value = data.report_n2_d1; }
     if (data.report_n3_d1) { document.getElementById('report-n3').value = data.report_n3_d1; }
@@ -1887,6 +1913,7 @@ function prefillFromExtracted(data, fieldsFound) {
     if (data.report_n1_d2) items.push({ label: '  Report N-1 conjoint', value: fmtE(data.report_n1_d2), found: true });
     if (data.report_n2_d2) items.push({ label: '  Report N-2 conjoint', value: fmtE(data.report_n2_d2), found: true });
   } else {
+    _plafondExtrait = 0; // Pas de plafond extrait → calcul depuis les revenus
     items.push({ label: 'Plafond PER', value: 'Calculé automatiquement', found: false });
   }
 
