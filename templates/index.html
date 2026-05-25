@@ -565,13 +565,18 @@
     </div>
 
     <hr class="divider">
-    <div class="section-title">Impôt réellement payé <span style="font-weight:400;color:var(--text-muted)">(clé pour calibrer l'optimisation)</span></div>
+    <div class="section-title">Données fiscales de l'avis d'imposition <span style="font-weight:400;color:var(--text-muted)">(priorité sur les estimations)</span></div>
     <div class="form-grid">
       <div class="field">
-        <label>Impôt net 2024 <span>(sur revenus 2023)</span></label>
+        <label>Impôt net 2024 <span>(ligne « Impôt net » de l'avis)</span></label>
         <input type="number" id="ir-net" placeholder="ex : 3200" min="0"
                oninput="this.dataset.manual='true'; this.dataset.auto=''; updateIrNetHint();">
-        <div class="hint ir-net-hint">Montant ligne <b>« Impôt net »</b> de votre avis d'imposition. Sera estimé automatiquement si laissé vide — corrigez avec votre valeur réelle pour des scénarios précis.</div>
+        <div class="hint ir-net-hint">Montant exact de l'avis d'imposition. Laissez vide pour estimation automatique.</div>
+      </div>
+      <div class="field">
+        <label>TMI <span>(taux marginal d'imposition — ligne « Taux marginal » de l'avis)</span></label>
+        <input type="number" id="tmi-avis" placeholder="ex : 30" min="0" max="60" step="1">
+        <div class="hint">En % — ex : 11, 30, 41. Si renseigné, utilisé directement. Sinon estimé depuis le barème.</div>
       </div>
     </div>
 
@@ -1343,7 +1348,10 @@ function calculate() {
     revenuImposable = netImpSalarie + netImpConj + revFonciers + autresRev;
   }
 
-  const tmi    = getTMI(revenuImposable, nbParts);
+  // TMI : priorité à la valeur de l'avis d'imposition (plus fiable que le barème recalculé)
+  const tmiAvisVal = numVal('tmi-avis');
+  const tmi = tmiAvisVal > 0 ? tmiAvisVal / 100 : getTMI(revenuImposable, nbParts);
+
   const irBase = calculateIR(revenuImposable, nbParts);
 
   // IR réellement payé (depuis avis d'imposition ou saisi manuellement)
@@ -1887,9 +1895,13 @@ function prefillFromExtracted(data, fieldsFound) {
     items.push({ label: 'Revenus fonciers', value: fmtE(data.revenus_fonciers), found: true });
   }
 
-  // ── TMI déclaré sur l'avis ────────────────────────────────────────
+  // ── TMI déclaré sur l'avis → remplir le champ tmi-avis ───────────
   if (data.tmi_declare) {
+    const tmiEl = document.getElementById('tmi-avis');
+    if (tmiEl) tmiEl.value = Math.round(data.tmi_declare);
     items.push({ label: 'TMI sur avis fiscal', value: data.tmi_declare.toFixed(0) + '%', found: true });
+  } else {
+    items.push({ label: 'TMI', value: 'Estimée depuis le barème', found: false });
   }
 
   // ── Revenu fiscal de référence ────────────────────────────────────
